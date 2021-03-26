@@ -1,12 +1,9 @@
-using Plots
-using Distributed
-@everywhere using JuMP
-@everywhere using Ipopt
-@everywhere using ParallelDataTransfer
 
-@everywhere include("DataTransferTools.jl")
-@everywhere include("C:/Users/apbab/OneDrive/Documents/Year 4/FYP/Julia Scripts/External Active Set/warmStart.jl")
-warm_start = warmStart
+
+
+
+using Distributed
+
 
 
 

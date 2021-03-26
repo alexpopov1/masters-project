@@ -1,8 +1,16 @@
+"""
+Centralised optimisation for vehicle platoon ring problem
 
-using JuMP
-using Ipopt
+"""
+
+
+using JuMP     # Optimisation problem definition
+using Ipopt    # Optimisation solver
 
 include("RingModel.jl")
+
+
+
 
 @everywhere function centralised(parameters)
 

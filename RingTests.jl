@@ -3,10 +3,9 @@
 # Required packages
 using Plots                               # For plotting results
 using Distributed                         # For parallelising 
-@everywhere using ParallelDataTransfer    # For data transfer between workers
 @everywhere using JuMP                    # For optimisation
 @everywhere using Ipopt                   # For optimisation
-@everywhere using CPUTime                 # For timing
+
 
 # Required files
 include("SmallestNeighbourhood.jl")
@@ -66,7 +65,7 @@ end
 # ****************************************************************************************************************
 
 # MODEL PROPERTIES
-num_cars = 8                                          # Number of cars
+num_cars = 8                                         # Number of cars
 dstart = Array(range(8, stop = 8, length = num_cars))  # Relative starting positions
 dsep = 2                                               # Initial and final distance between consecutive cars
 D = 500                                                # Total distance travelled by each car
@@ -78,7 +77,7 @@ vmax = 200                                             # Maximum velocity
 vmin = -vmax                                           # Minimum velocity
 T = 100                                              # Fixed time horizon
 N = 10 * T                                             # Number of time discretisations
-v1 = [0,1,0,-1,0,0, 0,0]                           # Initial velocities
+v1 = [0,2,0,-2,0,0,0,0]                           # Initial velocities
 v2 = Array(range(0, stop=0, length=num_cars))          # Terminal velocities
 
 

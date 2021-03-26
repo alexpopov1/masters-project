@@ -1,15 +1,17 @@
 
-using Distributed
-@everywhere using JuMP
-@everywhere using Ipopt
-@everywhere using ParallelDataTransfer
+"""
+Smallest Neighbourhood algorithm and some required functions, applicable to vehicle 
+platoon ring problem
+
+"""
+
+
+using Distributed         # Distributed implementation
+@everywhere using JuMP    # Optimisation problem definition
+@everywhere using Ipopt   # Optimisation solver
 
 @everywhere include("DataTransferTools.jl")
 @everywhere include("RingModel.jl")
-@everywhere include("C:/Users/apbab/OneDrive/Documents/Year 4/FYP/Julia Scripts/External Active Set/warmStart.jl")
-warm_start = warmStart
-
-
 
 
 
@@ -61,32 +63,86 @@ end
 
 
 
-@everywhere function solve_problem(model::Model, sys::Int, nodes::Array, prev_nodes::Array,
+@everywhere function warm_start(x::Array, u::Array, states::Array, inputs::Array)
+
+    # Set warm start for states
+    for j = 1:size(x)[1]
+        for k = 1:size(x)[2]
+            set_start_value(x[j,k], states[j,k])       
+        end
+    end
+
+
+    # Set warm start for inputs
+    if ndims(u) == 1
+
+        for j = length(u)
+            set_start_value(u[j], inputs[j])    
+        end
+
+    else        
+    
+        for j = 1:size(u)[1]
+            for k = 1:size(u)[2]
+                set_start_value(u[j,k], inputs[j,k])
+            end
+        end
+
+    end
+
+end
+
+
+
+
+
+
+
+
+
+
+@everywhere function warm_start(model::Model, parameters::Tuple, nhood::Array, prev_nhood::Array)
+
+    if has_values(model)
+
+        for i in prev_nhood
+            warm_start(model[:x][i], model[:u][i], value.(model[:x][i]), value.(model[:u][i]))
+        end
+
+        for i in setdiff(nhood, prev_nhood)
+            states, inputs = initialise(i, parameters)
+            warm_start(model[:x][i], model[:u][i], states, inputs)
+        end
+
+    else
+
+        for i in nhood
+            states, inputs = initialise(i, parameters)
+            warm_start(model[:x][i], model[:u][i], states, inputs)
+        end
+
+    end
+
+end
+
+
+
+
+
+
+
+@everywhere function solve_problem(model::Model, sys::Int, nhood::Array, prev_nhood::Array,
                                    parameters::Tuple, iter_limit::Int)
 
-    update_model(model, nodes, prev_nodes, parameters)
-    
-    if nodes == prev_nodes 
+
+    if nhood == prev_nhood
         iter_limit *= 2
         set_optimizer_attribute(model, "max_iter", iter_limit)     
     end
 
-    if has_values(model)
-        for i in prev_nodes
-            warm_start(model[:x][i], model[:u][i], value.(model[:x][i]), value.(model[:u][i]))
-        end
-        for i in setdiff(nodes, prev_nodes)
-            states, inputs = initialise(i, parameters)
-            warm_start(model[:x][i], model[:u][i], states, inputs)
-        end
-    else
-        for i in nodes
-            states, inputs = initialise(i, parameters)
-            warm_start(model[:x][i], model[:u][i], states, inputs)
-        end
-    end
 
-
+    update_model(model, nhood, prev_nhood, parameters)
+    warm_start(model, parameters, nhood, prev_nhood)
     optimise_model(model)                                         
     return value.(model[:x][sys]), value.(model[:u][sys]), iter_limit  
 
@@ -104,7 +160,7 @@ end
 
 DATA EXCHANGE BETWEEN AGENTS:
 
-The current agent (sys) needs to fill two dictionaries: node_solutions and nodes_of_nodes. These will
+The current agent (sys) needs to fill two dictionaries: nhood_solutions and nhood_of_agents. These will
 be filled with the appropriate data from the agent's neighbourhood, so first it can fill in its own
 data (key = sys). 
 
@@ -119,24 +175,24 @@ store it in the dictionaries with the appropriate key.
 
 
 
-@everywhere function neighbour_exchange(sys::Int, opt_states::Array, nodes::Array, neighbours::Array, agent_procs::Dict)
+@everywhere function neighbour_exchange(sys::Int, opt_states::Array, nhood::Array, neighbours::Array, agent_procs::Dict)
 
-        node_solutions = Dict()
-        node_solutions[sys] = opt_states
+        nhood_solutions = Dict()
+        nhood_solutions[sys] = opt_states
 
-        nodes_of_nodes = Dict()
-        nodes_of_nodes[sys] = nodes
+        nhood_of_agents = Dict()
+        nhood_of_agents[sys] = nhood
 
-        put!(c, (opt_states, nodes)) 
+        put!(c, (opt_states, nhood)) 
  
         @sync for j in neighbours
             @async begin 
                 remotecall_fetch(wait, agent_procs[j], getfield(Main, :c))
-                node_solutions[j], nodes_of_nodes[j] = fetch(@spawnat(agent_procs[j], fetch(getfield(Main, :c))))
+                nhood_solutions[j], nhood_of_agents[j] = fetch(@spawnat(agent_procs[j], fetch(getfield(Main, :c))))
             end
         end
 
-        return node_solutions, nodes_of_nodes
+        return nhood_solutions, nhood_of_agents
 
 end
 
@@ -208,13 +264,13 @@ end
 
 
 
-@everywhere function update_neighbourhood(nodes::Array, nodes_of_nodes::Dict, colliding_pairs::Array) 
+@everywhere function update_neighbourhood(nhood::Array, nhood_of_agents::Dict, colliding_pairs::Array) 
     
     for i in unique([(colliding_pairs...)...])
-        union!(nodes, nodes_of_nodes[i])                      
+        union!(nhood, nhood_of_agents[i])                      
     end
 
-    return ordering(nodes) 
+    return ordering(nhood) 
 
 end
 
@@ -243,10 +299,10 @@ to include the full neighbourhoods of the pair.
 
     # Initialise variables
     num_cars, _ = parameters
-    prev_nodes = [sys]
-    nodes = ordering([([sys, neighbours]...)...])
+    prev_nhood = [sys]
+    nhood = ordering([([sys, neighbours]...)...])
     model = base_model(sys, parameters, iter_limit)
-    opt_states, opt_inputs = Array{Float64, 2}, Array{Float64, 2}]
+    opt_states, opt_inputs = Array{Float64, 2}, Array{Float64, 2}
     it = 1
 
 
@@ -262,17 +318,17 @@ to include the full neighbourhoods of the pair.
     while true
 
         # Solve problem
-        println(sys, ": ", nodes) 
-	opt_states, opt_inputs, iter_limit = solve_problem(model, sys, nodes, prev_nodes, parameters, iter_limit)
+        println(sys, ": ", nhood) 
+	opt_states, opt_inputs, iter_limit = solve_problem(model, sys, nhood, prev_nhood, parameters, iter_limit)
 
 
         # Upload data and receive neighbour data
-        node_solutions, nodes_of_nodes = neighbour_exchange(sys, opt_states, nodes, neighbours, agent_procs)
+        nhood_solutions, nhood_of_agents = neighbour_exchange(sys, opt_states, nhood, neighbours, agent_procs)
 
 
         # Identify collisions between consecutive agents in neighbourhood
-	ordered_solutions = [node_solutions[j] for j in nodes]
-	colliding_pairs = collisions(ordered_solutions, nodes, parameters)
+	ordered_solutions = [nhood_solutions[j] for j in nhood]
+	colliding_pairs = collisions(ordered_solutions, nhood, parameters)
 
 
         # Check for globally feasible solution
@@ -288,16 +344,16 @@ to include the full neighbourhoods of the pair.
 
 
         # Update graph
-        prev_nodes = copy(nodes)
-        nodes = update_neighbourhood(nodes, nodes_of_nodes, colliding_pairs)
-	neighbours = filter(x->x!=sys, nodes)
+        prev_nhood = copy(nhood)
+        nhood = update_neighbourhood(nhood, nhood_of_agents, colliding_pairs)
+	neighbours = filter(x->x!=sys, nhood)
 
         
         it += 1
 
     end  
 
-    return opt_states, opt_inputs, (nodes, prev_nodes)
+    return opt_states, opt_inputs, (nhood, prev_nhood)
 
 end
 

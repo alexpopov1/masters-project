@@ -140,10 +140,11 @@ end
     end
 
 
-    update_model(model, nhood, prev_nhood, parameters)
-    warm_start(model, parameters, nhood, prev_nhood)
-    optimise_model(model)                                         
-    return value.(model[:x][sys]), value.(model[:u][sys]), iter_limit  
+    update = @elapsed update_model(model, nhood, prev_nhood, parameters)
+    warmstart = @elapsed warm_start(model, parameters, nhood, prev_nhood)
+    solving = @elapsed optimise_model(model)  
+    println("update: ", update, "   warmstart: ", warmstart, "   solver: ", solving)                                       
+    @time return value.(model[:x][sys]), value.(model[:u][sys]), iter_limit  
 
 end
 
@@ -316,9 +317,11 @@ to include the full neighbourhoods of the pair.
 
     while true
 
+        loop = @elapsed begin
+
         # Solve problem
         println(sys, ": ", nhood) 
-	opt_states, opt_inputs, iter_limit = solve_problem(model, sys, nhood, prev_nhood, parameters, iter_limit)
+	prob = @elapsed opt_states, opt_inputs, iter_limit = solve_problem(model, sys, nhood, prev_nhood, parameters, iter_limit)
 
 
         # Upload data and receive neighbour data
@@ -350,6 +353,10 @@ to include the full neighbourhoods of the pair.
         
         it += 1
 
+
+        end
+
+        println("prob: ", prob, ", loop: ", loop)
     end  
 
     return opt_states, opt_inputs, (nhood, prev_nhood)

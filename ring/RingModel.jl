@@ -190,50 +190,59 @@ end
 @everywhere function update_model(model::Model, nodes::Array, 
                                   prev_nodes::Array, parameters::Tuple)
 
-    num_cars, _, N = parameters
-    new_neighbours = setdiff(nodes, prev_nodes)
-    new_rear_neighbours, new_front_neighbours, rear_index, front_index = 
-        ordering_new_neighbourhood(nodes, prev_nodes, parameters)
+
+    if nodes == prev_nodes
+
+        nothing
 
 
-    x = model[:x]
-    u = model[:u]
-    for j in new_neighbours
-        x[j] = @variable(model, [1:2, 1:N+1], base_name = "x$j")
-        u[j] = @variable(model, [1:N], base_name = "u$j")
-    end
+    else
+
+        num_cars, _, N = parameters
+        new_neighbours = setdiff(nodes, prev_nodes)
+        new_rear_neighbours, new_front_neighbours, rear_index, front_index = 
+             ordering_new_neighbourhood(nodes, prev_nodes, parameters)
+
+
+        x = model[:x]
+        u = model[:u]
+        for j in new_neighbours
+            x[j] = @variable(model, [1:2, 1:N+1], base_name = "x$j")
+            u[j] = @variable(model, [1:N], base_name = "u$j")
+        end
     
 
-    @objective(model, Min, sum(sum([u[j].^2 for j in nodes])))
-    @constraint(model, [j in new_neighbours], equalities(j, x[j], u[j], parameters) .== 0)
-    @constraint(model, [j in new_neighbours], uncoupled_inequalities(x[j], u[j], parameters) .<= 0)
+        @objective(model, Min, sum(sum([u[j].^2 for j in nodes])))
+        @constraint(model, [j in new_neighbours], equalities(j, x[j], u[j], parameters) .== 0)
+        @constraint(model, [j in new_neighbours], uncoupled_inequalities(x[j], u[j], parameters) .<= 0)
 
 
-    if length(new_rear_neighbours) > 0
-        @constraint(model, coupled_inequalities(x[last(new_rear_neighbours)], x[nodes[rear_index]], parameters,
-                                                nodes[rear_index] == 1 ? true : false) .<= 0)
-        if length(new_rear_neighbours) > 1
-            for k = 1:length(new_rear_neighbours)-1
-                @constraint(model, coupled_inequalities(x[new_rear_neighbours[k]], x[new_rear_neighbours[k+1]], parameters,
-                                                        x[new_rear_neighbours[k]] == num_cars ? true : false) .<= 0)
-            end
-	end
-    end
+        if length(new_rear_neighbours) > 0
+            @constraint(model, coupled_inequalities(x[last(new_rear_neighbours)], x[nodes[rear_index]], parameters,
+                                                    nodes[rear_index] == 1 ? true : false) .<= 0)
+            if length(new_rear_neighbours) > 1
+                for k = 1:length(new_rear_neighbours)-1
+                    @constraint(model, coupled_inequalities(x[new_rear_neighbours[k]], x[new_rear_neighbours[k+1]], parameters,
+                                                            x[new_rear_neighbours[k]] == num_cars ? true : false) .<= 0)
+                end
+	    end
+        end
 
 
-    if length(new_front_neighbours) > 0
-        @constraint(model, coupled_inequalities(x[nodes[front_index]], x[new_front_neighbours[1]], parameters, 
-                                                nodes[front_index] == num_cars ? true : false) .<= 0)
-	if length(new_front_neighbours) > 1
-            for k = 1:length(new_front_neighbours)-1
-                @constraint(model, coupled_inequalities(x[new_front_neighbours[k]], x[new_front_neighbours[k+1]], parameters,
-                                                        new_front_neighbours[k] == num_cars ? true : false) .<= 0)
-            end
-	end
-    end
+        if length(new_front_neighbours) > 0
+            @constraint(model, coupled_inequalities(x[nodes[front_index]], x[new_front_neighbours[1]], parameters, 
+                                                    nodes[front_index] == num_cars ? true : false) .<= 0)
+	    if length(new_front_neighbours) > 1
+                for k = 1:length(new_front_neighbours)-1
+                    @constraint(model, coupled_inequalities(x[new_front_neighbours[k]], x[new_front_neighbours[k+1]], parameters,
+                                                            new_front_neighbours[k] == num_cars ? true : false) .<= 0)
+                end
+	    end
+        end
   
- 
-    nothing
+        nothing
+
+    end
 
 end
 

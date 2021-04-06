@@ -32,9 +32,9 @@ end
 
 
 
-@everywhere function ordering(nodes::Array)
+@everywhere function ordering(nhood::Array)
 
-    order = sort(nodes)
+    order = sort(nhood)
     for i = 1:length(order)-1
 	if order[i+1] - order[i] != 1
 	    order = [([order[i+1:length(order)], order[1:i]]...)...]
@@ -54,21 +54,21 @@ end
 
 
 
-@everywhere function ordering_new_neighbourhood(nodes::Array{Int, 1}, prev_nodes::Array{Int, 1}, parameters::Tuple)
+@everywhere function ordering_new_neighbourhood(nhood::Array{Int, 1}, prev_nhood::Array{Int, 1}, parameters::Tuple)
 
     _, _, N = parameters
     
-    rear_index = findall(node->node==prev_nodes[1], nodes)[1]
-    front_index = findall(node->node==last(prev_nodes), nodes)[1]
+    rear_index = findall(agent->agent==prev_nhood[1], nhood)[1]
+    front_index = findall(agent->agent==last(prev_nhood), nhood)[1]
 
     if rear_index > 1
-        new_rear_neighbours = Array(nodes[1]:nodes[rear_index-1])
+        new_rear_neighbours = Array(nhood[1]:nhood[rear_index-1])
     else 
         new_rear_neighbours = []
     end
 
-    if front_index[1] < length(nodes)
-	new_front_neighbours = Array(nodes[front_index+1]:last(nodes))
+    if front_index[1] < length(nhood)
+	new_front_neighbours = Array(nhood[front_index+1]:last(nhood))
     else
         new_front_neighbours = []
     end
@@ -187,11 +187,11 @@ end
 
 
 
-@everywhere function update_model(model::Model, nodes::Array, 
-                                  prev_nodes::Array, parameters::Tuple)
+@everywhere function update_model(model::Model, nhood::Array, 
+                                  prev_nhood::Array, parameters::Tuple)
 
 
-    if nodes == prev_nodes
+    if nhood == prev_nhood
 
         nothing
 
@@ -199,9 +199,9 @@ end
     else
 
         num_cars, _, N = parameters
-        new_neighbours = setdiff(nodes, prev_nodes)
+        new_neighbours = setdiff(nhood, prev_nhood)
         new_rear_neighbours, new_front_neighbours, rear_index, front_index = 
-             ordering_new_neighbourhood(nodes, prev_nodes, parameters)
+             ordering_new_neighbourhood(nhood, prev_nhood, parameters)
 
 
         x = model[:x]
@@ -212,14 +212,14 @@ end
         end
     
 
-        @objective(model, Min, sum(sum([u[j].^2 for j in nodes])))
+        @objective(model, Min, sum(sum([u[j].^2 for j in nhood])))
         @constraint(model, [j in new_neighbours], equalities(j, x[j], u[j], parameters) .== 0)
         @constraint(model, [j in new_neighbours], uncoupled_inequalities(x[j], u[j], parameters) .<= 0)
 
 
         if length(new_rear_neighbours) > 0
-            @constraint(model, coupled_inequalities(x[last(new_rear_neighbours)], x[nodes[rear_index]], parameters,
-                                                    nodes[rear_index] == 1 ? true : false) .<= 0)
+            @constraint(model, coupled_inequalities(x[last(new_rear_neighbours)], x[nhood[rear_index]], parameters,
+                                                    nhood[rear_index] == 1 ? true : false) .<= 0)
             if length(new_rear_neighbours) > 1
                 for k = 1:length(new_rear_neighbours)-1
                     @constraint(model, coupled_inequalities(x[new_rear_neighbours[k]], x[new_rear_neighbours[k+1]], parameters,
@@ -230,8 +230,8 @@ end
 
 
         if length(new_front_neighbours) > 0
-            @constraint(model, coupled_inequalities(x[nodes[front_index]], x[new_front_neighbours[1]], parameters, 
-                                                    nodes[front_index] == num_cars ? true : false) .<= 0)
+            @constraint(model, coupled_inequalities(x[nhood[front_index]], x[new_front_neighbours[1]], parameters, 
+                                                    nhood[front_index] == num_cars ? true : false) .<= 0)
 	    if length(new_front_neighbours) > 1
                 for k = 1:length(new_front_neighbours)-1
                     @constraint(model, coupled_inequalities(x[new_front_neighbours[k]], x[new_front_neighbours[k+1]], parameters,

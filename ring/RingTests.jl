@@ -1,3 +1,4 @@
+
 # Required packages
 using Plots                               # For plotting results
 using Distributed                         # For parallelising
@@ -124,7 +125,7 @@ neighbours = make_neighbourhood(num_cars, num_followers, num_leaders)
 
 
 
-states, inputs, testing = Dict(), Dict(), Dict()      # Initialise solutions
+states, inputs, timing = Dict(), Dict(), Dict()      # Initialise solutions
 
 
 
@@ -141,12 +142,12 @@ elseif solve_method == 2
     agent_procs = Dict(i=>workers()[i] for i = 1:parameters[1])
     @time @sync for sys = 1:num_cars
 
-        @async states[sys], inputs[sys], testing[sys] = remotecall_fetch(smallest_neighbourhood, agent_procs[sys],
+        @async states[sys], inputs[sys], timing[sys] = remotecall_fetch(smallest_neighbourhood, agent_procs[sys],
                                                    sys, hub, parameters, neighbours[sys], iter_limit = iter_limit)
 
     end
 
-	println(mean([testing[j] for j = 1:num_cars]))
+	println("TOTAL TIME TO COMPLETION: ", mean([timing[j] for j = 1:num_cars]))
 
 end
 

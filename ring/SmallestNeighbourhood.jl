@@ -1,3 +1,4 @@
+
 """
 Smallest Neighbourhood algorithm and some required functions, applicable to vehicle
 platoon ring problem
@@ -141,7 +142,9 @@ end
     update = @elapsed update_model(model, nhood, prev_nhood, parameters)
     warmstart = @elapsed warm_start(model, parameters, nhood, prev_nhood)
     solving = @elapsed optimise_model(model)
+
     println("update: ", update, "   warmstart: ", warmstart, "   solver: ", solving)
+
     return value.(model[:x][sys]), value.(model[:u][sys]), update
 
 end
@@ -304,17 +307,30 @@ to include the full neighbourhoods of the pair.
     initialupdate = 1.0
     innerloop = 1.0
     prob = 1.0
+
+    # BEGIN TIMING TOTAL TIME IN WHILE LOOP
     totalloop = @elapsed begin
+
     while true
 
-        
+
+
+
+
+        # BEGIN TIMING FULL LOOP
         loop = @elapsed begin
-        innerloop = @elapsed begin
+
+
+
+
+
+        # BEGIN TIMING PARTIAL LOOP
+        lastloop = @elapsed begin       
         
         # Solve problem
         println(sys, ": ", nhood)
-     	prob = @elapsed opt_states, opt_inputs, update = solve_problem(model, sys, nhood, prev_nhood, parameters, iter_limit)
-
+        prob = @elapsed opt_states, opt_inputs, update = solve_problem(model, sys, nhood, prev_nhood, parameters, iter_limit)
+        
         if it == 1
             initialupdate = copy(update)
         end
@@ -322,16 +338,22 @@ to include the full neighbourhoods of the pair.
         # Upload data and receive neighbour data
         nhood_solutions, nhood_of_agents = neighbour_exchange(sys, opt_states, nhood, neighbours, agent_procs)
 
-
         # Identify collisions between consecutive agents in neighbourhood
-	    ordered_solutions = [nhood_solutions[j] for j in nhood]
-	    colliding_pairs = collisions(ordered_solutions, nhood, parameters)
-
+        ordered_solutions = [nhood_solutions[j] for j in nhood]
+	colliding_pairs = collisions(ordered_solutions, nhood, parameters)
 
         # Check for globally feasible solution
         SOLVED = isempty(colliding_pairs) ? true : false
         ALL_SOLVED = hub_exchange(sys, hub, SOLVED, agent_procs, num_cars)
+
+        # STOP TIMING PARTIAL LOOP
         end
+        
+
+
+
+
+
         if ALL_SOLVED
            break
         end
@@ -344,24 +366,60 @@ to include the full neighbourhoods of the pair.
         # Update graph
         prev_nhood = copy(nhood)
         nhood = update_neighbourhood(nhood, nhood_of_agents, colliding_pairs)
-	    neighbours = filter(x->x!=sys, nhood)
-
+	neighbours = filter(x->x!=sys, nhood)
 
         it += 1
 
-	
-
+        # STOP TIMING FULL LOOP    
         end
-        println("prob: ", prob, ", loop: ", loop)
 
 
 
+
+
+
+        println("Local problem: ", prob, ", loop: ", loop)
+
+
+
+    end    # End while
+
+
+    # STOP TIMING TOTAL TIME IN WHILE LOOP
     end
 
-    end
 
-    println("prob: ", prob, ", loop: ", innerloop)
+
+
+
+    println("Local problem: ", prob, ", loop: ", lastloop)
 
     return opt_states, opt_inputs, totalloop-initialupdate
 
 end
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

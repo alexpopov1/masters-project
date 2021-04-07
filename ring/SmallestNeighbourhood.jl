@@ -1,8 +1,6 @@
-
 """
-Smallest Neighbourhood algorithm and some required functions, applicable to vehicle 
+Smallest Neighbourhood algorithm and some required functions, applicable to vehicle
 platoon ring problem
-
 """
 
 
@@ -23,8 +21,8 @@ using Distributed         # Distributed implementation
 @everywhere function eval_collision_constraints(states_array::Array, indices::Array, parameters::Tuple)
 
     num_cars, _ = parameters
-    return [coupled_inequalities(states_array[i], states_array[i+1], 
-            parameters, indices[i] == num_cars ? true : false) 
+    return [coupled_inequalities(states_array[i], states_array[i+1],
+            parameters, indices[i] == num_cars ? true : false)
             for i = 1:length(states_array)-1]
 
 end
@@ -53,7 +51,7 @@ end
     return pairs
 
 end
-            
+
 
 
 
@@ -67,7 +65,7 @@ end
     # Set warm start for states
     for j = 1:size(x)[1]
         for k = 1:size(x)[2]
-            set_start_value(x[j,k], states[j,k])       
+            set_start_value(x[j,k], states[j,k])
         end
     end
 
@@ -76,11 +74,11 @@ end
     if ndims(u) == 1
 
         for j = length(u)
-            set_start_value(u[j], inputs[j])    
+            set_start_value(u[j], inputs[j])
         end
 
-    else        
-    
+    else
+
         for j = 1:size(u)[1]
             for k = 1:size(u)[2]
                 set_start_value(u[j,k], inputs[j,k])
@@ -136,15 +134,15 @@ end
 
     if nhood == prev_nhood
         iter_limit *= 2
-        set_optimizer_attribute(model, "max_iter", iter_limit)     
+        set_optimizer_attribute(model, "max_iter", iter_limit)
     end
 
 
     update = @elapsed update_model(model, nhood, prev_nhood, parameters)
     warmstart = @elapsed warm_start(model, parameters, nhood, prev_nhood)
-    solving = @elapsed optimise_model(model)  
-    println("update: ", update, "   warmstart: ", warmstart, "   solver: ", solving)                                       
-    @time return value.(model[:x][sys]), value.(model[:u][sys]), iter_limit  
+    solving = @elapsed optimise_model(model)
+    println("update: ", update, "   warmstart: ", warmstart, "   solver: ", solving)
+    return value.(model[:x][sys]), value.(model[:u][sys]), update
 
 end
 
@@ -157,20 +155,15 @@ end
 
 
 """
-
 DATA EXCHANGE BETWEEN AGENTS:
-
 The current agent (sys) needs to fill two dictionaries: nhood_solutions and nhood_of_agents. These will
 be filled with the appropriate data from the agent's neighbourhood, so first it can fill in its own
-data (key = sys). 
-
-The agent has to make its data available to any other agents that require it, so it uploads its 
-solutions and neighbourhood index set to the channel c. 
-
+data (key = sys).
+The agent has to make its data available to any other agents that require it, so it uploads its
+solutions and neighbourhood index set to the channel c.
 To get information from neighbours, the agent calls a wait function at each neighbour, waiting for the
-local c channel to contain data. Once there is data on a neighbour's c, sys will fetch this data and 
+local c channel to contain data. Once there is data on a neighbour's c, sys will fetch this data and
 store it in the dictionaries with the appropriate key.
-
 """
 
 
@@ -183,10 +176,10 @@ store it in the dictionaries with the appropriate key.
         nhood_of_agents = Dict()
         nhood_of_agents[sys] = nhood
 
-        put!(c, (opt_states, nhood)) 
- 
+        put!(c, (opt_states, nhood))
+
         @sync for j in neighbours
-            @async begin 
+            @async begin
                 remotecall_fetch(wait, agent_procs[j], getfield(Main, :c))
                 nhood_solutions[j], nhood_of_agents[j] = fetch(@spawnat(agent_procs[j], fetch(getfield(Main, :c))))
             end
@@ -206,18 +199,14 @@ end
 
 
 """
-
 DATA EXCHANGE WITH HUB:
-
-A non-hub agent will upload SOLVED boolean to its to_hub channel, then remotely call a wait function on 
-the hub agent, to wait for the channel from_hub to contain data. Once this channel contains data, the 
+A non-hub agent will upload SOLVED boolean to its to_hub channel, then remotely call a wait function on
+the hub agent, to wait for the channel from_hub to contain data. Once this channel contains data, the
 data (ALL_SOLVED boolean) will be taken by the agent, telling it whether the problem has been
 globally solved.
-
-The hub agent calls a wait function at each other agent in the system, to wait for the local to_hub to 
+The hub agent calls a wait function at each other agent in the system, to wait for the local to_hub to
 contain data. Once there is data on a channel (SOLVED boolean), the hub will take it. Once all SOLVED
 booleans have been taken, the hub determines the value of ALL_SOLVED, and then uploads it to from_hub.
-
 """
 
 
@@ -226,8 +215,8 @@ booleans have been taken, the hub determines the value of ALL_SOLVED, and then u
 
 
 	if sys != hub
-          
-	    put!(to_hub, SOLVED)                  
+
+	    put!(to_hub, SOLVED)
             remotecall_fetch(wait, agent_procs[hub], @spawnat(agent_procs[hub], from_hub))
             ALL_SOLVED = fetch(@spawnat(agent_procs[hub], take!(from_hub)))
 
@@ -236,10 +225,10 @@ booleans have been taken, the hub determines the value of ALL_SOLVED, and then u
             agent_check = Dict()
             agent_check[hub] = SOLVED
 
-            @sync for j in filter(x->x!=hub, Array(1:num_cars)) 
+            @sync for j in filter(x->x!=hub, Array(1:num_cars))
                 @async begin
-                    remotecall_fetch(wait, agent_procs[j], @spawnat(agent_procs[j], to_hub))  
-                    agent_check[j] = fetch(@spawnat(agent_procs[j], take!(to_hub))) 
+                    remotecall_fetch(wait, agent_procs[j], @spawnat(agent_procs[j], to_hub))
+                    agent_check[j] = fetch(@spawnat(agent_procs[j], take!(to_hub)))
                 end
             end
 
@@ -264,13 +253,13 @@ end
 
 
 
-@everywhere function update_neighbourhood(nhood::Array, nhood_of_agents::Dict, colliding_pairs::Array) 
-    
+@everywhere function update_neighbourhood(nhood::Array, nhood_of_agents::Dict, colliding_pairs::Array)
+
     for i in unique([(colliding_pairs...)...])
-        union!(nhood, nhood_of_agents[i])                      
+        union!(nhood, nhood_of_agents[i])
     end
 
-    return ordering(nhood) 
+    return ordering(nhood)
 
 end
 
@@ -284,13 +273,11 @@ end
 
 
 """
-
 Smallest neighbourhood algorithm solves a system problem, then compares optimal solutions from itself and
 from the neighbourhood controllers. If any coupled constraints (in this case, collision avoidance) are
 violated among these solutions, then identify the critical colliding pair and update the system neighbourhood
 to include the full neighbourhoods of the pair.
-
-""" 
+"""
 
 
 @everywhere function smallest_neighbourhood(sys::Int, hub::Int, parameters::Tuple, neighbours::Array;
@@ -307,37 +294,46 @@ to include the full neighbourhoods of the pair.
 
 
     # Initialise channels
-    global c = Channel{Any}(1) 
+    global c = Channel{Any}(1)
     if sys == hub
         global from_hub = Channel{Bool}(num_cars-1)
     else
         global to_hub = Channel{Bool}(1)
     end
-    
 
+    initialupdate = 1.0
+    innerloop = 1.0
+    prob = 1.0
+    totalloop = @elapsed begin
     while true
 
+        
         loop = @elapsed begin
-
+        innerloop = @elapsed begin
+        
         # Solve problem
-        println(sys, ": ", nhood) 
-	prob = @elapsed opt_states, opt_inputs, iter_limit = solve_problem(model, sys, nhood, prev_nhood, parameters, iter_limit)
+        println(sys, ": ", nhood)
+     	prob = @elapsed opt_states, opt_inputs, update = solve_problem(model, sys, nhood, prev_nhood, parameters, iter_limit)
 
-
+        if it == 1
+            initialupdate = copy(update)
+        end
+            
         # Upload data and receive neighbour data
         nhood_solutions, nhood_of_agents = neighbour_exchange(sys, opt_states, nhood, neighbours, agent_procs)
 
 
         # Identify collisions between consecutive agents in neighbourhood
-	ordered_solutions = [nhood_solutions[j] for j in nhood]
-	colliding_pairs = collisions(ordered_solutions, nhood, parameters)
+	    ordered_solutions = [nhood_solutions[j] for j in nhood]
+	    colliding_pairs = collisions(ordered_solutions, nhood, parameters)
 
 
         # Check for globally feasible solution
         SOLVED = isempty(colliding_pairs) ? true : false
         ALL_SOLVED = hub_exchange(sys, hub, SOLVED, agent_procs, num_cars)
-        if ALL_SOLVED 
-            break
+        end
+        if ALL_SOLVED
+           break
         end
 
 
@@ -348,92 +344,24 @@ to include the full neighbourhoods of the pair.
         # Update graph
         prev_nhood = copy(nhood)
         nhood = update_neighbourhood(nhood, nhood_of_agents, colliding_pairs)
-	neighbours = filter(x->x!=sys, nhood)
+	    neighbours = filter(x->x!=sys, nhood)
 
-        
+
         it += 1
 
+	
 
         end
-
         println("prob: ", prob, ", loop: ", loop)
-    end  
 
-    return opt_states, opt_inputs, (nhood, prev_nhood)
+
+
+    end
+
+    end
+
+    println("prob: ", prob, ", loop: ", innerloop)
+
+    return opt_states, opt_inputs, totalloop-initialupdate
 
 end
-
-
-
-                   
- 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

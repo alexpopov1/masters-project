@@ -1,8 +1,7 @@
-
-
 # Required packages
 using Plots                               # For plotting results
-using Distributed                         # For parallelising 
+using Distributed                         # For parallelising
+using Statistics                          # For mean calculation
 @everywhere using JuMP                    # For optimisation
 @everywhere using Ipopt                   # For optimisation
 
@@ -18,7 +17,7 @@ include("Centralised.jl")
 
 
 @everywhere function make_neighbourhood(num_cars::Int, num_followers::Array{Int64, 1}, num_leaders::Array{Int64, 1})
-    
+
     leaders = Array{Array{Int64}}(undef, num_cars)
     followers = Array{Array{Int64}}(undef, num_cars)
     neighbours = Array{Array}(undef, num_cars)
@@ -65,11 +64,11 @@ end
 # ****************************************************************************************************************
 
 # MODEL PROPERTIES
-num_cars = 8                                         # Number of cars
+num_cars = 4                                        # Number of cars
 dstart = Array(range(8, stop = 8, length = num_cars))  # Relative starting positions
 dsep = 2                                               # Initial and final distance between consecutive cars
 D = 500                                                # Total distance travelled by each car
-radius = 16                                            # Radius of ring
+radius = 110                                           # Radius of ring
 dmin = 0.5                                             # Minimum distance between consecutive cars
 umax = 0.1                                             # Maximum force
 umin = -0.2                                            # Minimum force
@@ -77,7 +76,8 @@ vmax = 200                                             # Maximum velocity
 vmin = -vmax                                           # Minimum velocity
 T = 100                                              # Fixed time horizon
 N = 10 * T                                             # Number of time discretisations
-v1 = [0,2,0,-2,0,0,0,0]                           # Initial velocities
+# v1 = v2 = Array(range(0, stop=0, length=num_cars))    # Initial velocities
+v1 = [([[1,0,-1], repeat([0],num_cars-3)]...)...]
 v2 = Array(range(0, stop=0, length=num_cars))          # Terminal velocities
 
 
@@ -92,12 +92,12 @@ hub = Int(ceil(num_cars/2))                            # Hub agent
 
 # SOLVER PROPERTIES (see KEY)
 iter_limit = 100                                    # Ipopt iteration limit
-solve_method = 2                                      # Solve method flag
+solve_method = 2                          # Solve method flag
 
 
 # KEY
-# 1: centralised 
-# 2: smallest neighbour 
+# 1: centralised
+# 2: smallest neighbour
 
 
 
@@ -133,7 +133,7 @@ states, inputs, testing = Dict(), Dict(), Dict()      # Initialise solutions
 
 if solve_method == 1
 
-    @time states, inputs = centralised(parameters)
+    @time states, inputs = remotecall_fetch(centralised, 2, parameters)
 
 elseif solve_method == 2
 
@@ -146,8 +146,9 @@ elseif solve_method == 2
 
     end
 
-end
+	println(mean([testing[j] for j = 1:num_cars]))
 
+end
 
 
 
@@ -166,24 +167,3 @@ display(trajectoryPlot)
 # Find input cost
 inputCost = sum(sum([inputs[i] .* inputs[i] for i = 1:num_cars]))
 println("Input cost = ", inputCost)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

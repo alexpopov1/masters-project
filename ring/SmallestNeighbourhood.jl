@@ -1,4 +1,3 @@
-
 """
 Smallest Neighbourhood algorithm and some required functions, applicable to vehicle
 platoon ring problem
@@ -305,7 +304,7 @@ to include the full neighbourhoods of the pair.
     end
 
     initialupdate = 1.0
-    innerloop = 1.0
+    lastloop = 1.0
     prob = 1.0
 
     # BEGIN TIMING TOTAL TIME IN WHILE LOOP
@@ -397,29 +396,3 @@ to include the full neighbourhoods of the pair.
     return opt_states, opt_inputs, totalloop-initialupdate
 
 end
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

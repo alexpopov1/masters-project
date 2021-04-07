@@ -134,13 +134,13 @@ states, inputs, timing = Dict(), Dict(), Dict()      # Initialise solutions
 
 if solve_method == 1
 
-    @time states, inputs = remotecall_fetch(centralised, 2, parameters)
+    states, inputs = remotecall_fetch(centralised, 2, parameters)
 
 elseif solve_method == 2
 
 
     agent_procs = Dict(i=>workers()[i] for i = 1:parameters[1])
-    @time @sync for sys = 1:num_cars
+    @sync for sys = 1:num_cars
 
         @async states[sys], inputs[sys], timing[sys] = remotecall_fetch(smallest_neighbourhood, agent_procs[sys],
                                                    sys, hub, parameters, neighbours[sys], iter_limit = iter_limit)

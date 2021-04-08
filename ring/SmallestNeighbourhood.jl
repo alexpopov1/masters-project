@@ -1,3 +1,4 @@
+
 """
 Smallest Neighbourhood algorithm and some required functions, applicable to vehicle
 platoon ring problem
@@ -172,22 +173,22 @@ store it in the dictionaries with the appropriate key.
 
 @everywhere function neighbour_exchange(sys::Int, opt_states::Array, nhood::Array, neighbours::Array, agent_procs::Dict)
 
-        nhood_solutions = Dict()
-        nhood_solutions[sys] = opt_states
+    nhood_solutions = Dict()
+    nhood_solutions[sys] = opt_states
 
-        nhood_of_agents = Dict()
-        nhood_of_agents[sys] = nhood
+    nhood_of_agents = Dict()
+    nhood_of_agents[sys] = nhood
 
-        put!(c, (opt_states, nhood))
+    put!(c, (opt_states, nhood))
 
-        @sync for j in neighbours
-            @async begin
-                remotecall_fetch(wait, agent_procs[j], getfield(Main, :c))
-                nhood_solutions[j], nhood_of_agents[j] = fetch(@spawnat(agent_procs[j], fetch(getfield(Main, :c))))
-            end
+    @sync for j in neighbours
+        @async begin
+            remotecall_fetch(wait, agent_procs[j], getfield(Main, :c))
+            nhood_solutions[j], nhood_of_agents[j] = fetch(@spawnat(agent_procs[j], fetch(getfield(Main, :c))))
         end
+    end
 
-        return nhood_solutions, nhood_of_agents
+    return nhood_solutions, nhood_of_agents
 
 end
 
@@ -215,34 +216,33 @@ booleans have been taken, the hub determines the value of ALL_SOLVED, and then u
 
 @everywhere function hub_exchange(sys::Int, hub::Int, SOLVED::Bool, agent_procs::Dict, num_cars::Int)
 
+    if sys != hub
 
-	if sys != hub
+	put!(to_hub, SOLVED)
+        remotecall_fetch(wait, agent_procs[hub], @spawnat(agent_procs[hub], from_hub))
+        ALL_SOLVED = fetch(@spawnat(agent_procs[hub], take!(from_hub)))
 
-	    put!(to_hub, SOLVED)
-            remotecall_fetch(wait, agent_procs[hub], @spawnat(agent_procs[hub], from_hub))
-            ALL_SOLVED = fetch(@spawnat(agent_procs[hub], take!(from_hub)))
+    else
 
-	else
+        agent_check = Dict()
+        agent_check[hub] = SOLVED
 
-            agent_check = Dict()
-            agent_check[hub] = SOLVED
-
-            @sync for j in filter(x->x!=hub, Array(1:num_cars))
-                @async begin
-                    remotecall_fetch(wait, agent_procs[j], @spawnat(agent_procs[j], to_hub))
-                    agent_check[j] = fetch(@spawnat(agent_procs[j], take!(to_hub)))
-                end
+        @sync for j in filter(x->x!=hub, Array(1:num_cars))
+            @async begin
+                remotecall_fetch(wait, agent_procs[j], @spawnat(agent_procs[j], to_hub))
+                agent_check[j] = fetch(@spawnat(agent_procs[j], take!(to_hub)))
             end
+        end
 
-            ALL_SOLVED = false in [agent_check[j] for j = 1:num_cars] ? false : true
-            println("ALL_SOLVED = ", ALL_SOLVED)
-            for _ in 1:num_cars-1
-                put!(from_hub, ALL_SOLVED)
-	    end
-
+        ALL_SOLVED = false in [agent_check[j] for j = 1:num_cars] ? false : true
+        println("ALL_SOLVED = ", ALL_SOLVED)
+        for _ in 1:num_cars-1
+            put!(from_hub, ALL_SOLVED)
 	end
 
-        return ALL_SOLVED
+    end
+
+    return ALL_SOLVED
 
 end
 
@@ -264,6 +264,7 @@ end
     return ordering(nhood)
 
 end
+
 
 
 
@@ -396,3 +397,29 @@ to include the full neighbourhoods of the pair.
     return opt_states, opt_inputs, totalloop-initialupdate
 
 end
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -3,6 +3,7 @@
 using Plots                               # For plotting results
 using Distributed                         # For parallelising
 using Statistics                          # For mean calculation
+using LinearAlgebra                       # For norm calculation
 @everywhere using JuMP                    # For optimisation
 @everywhere using Ipopt                   # For optimisation
 
@@ -10,8 +11,8 @@ using Statistics                          # For mean calculation
 # Required files
 include("SmallestNeighbourhood.jl")
 include("Centralised.jl")
-
-
+include("ADMM.jl")
+include("Consensus.jl")
 
 
 
@@ -65,7 +66,7 @@ end
 # ****************************************************************************************************************
 
 # MODEL PROPERTIES
-num_cars = 4                                        # Number of cars
+num_cars = 8                                        # Number of cars
 dstart = Array(range(8, stop = 8, length = num_cars))  # Relative starting positions
 dsep = 2                                               # Initial and final distance between consecutive cars
 D = 500                                                # Total distance travelled by each car
@@ -78,7 +79,8 @@ vmin = -vmax                                           # Minimum velocity
 T = 100                                              # Fixed time horizon
 N = 10 * T                                             # Number of time discretisations
 # v1 = v2 = Array(range(0, stop=0, length=num_cars))    # Initial velocities
-v1 = [([[1,0,-1], repeat([0],num_cars-3)]...)...]
+# v1 = [([[1,0,-1], repeat([0],num_cars-3)]...)...]
+v1 = [0, 2, 1, 0, -1, -2, 0, 0] 
 v2 = Array(range(0, stop=0, length=num_cars))          # Terminal velocities
 
 
@@ -93,7 +95,7 @@ hub = Int(ceil(num_cars/2))                            # Hub agent
 
 # SOLVER PROPERTIES (see KEY)
 iter_limit = 100                                    # Ipopt iteration limit
-solve_method = 2                          # Solve method flag
+solve_method = 3                           # Solve method flag
 
 
 # KEY
@@ -126,45 +128,85 @@ neighbours = make_neighbourhood(num_cars, num_followers, num_leaders)
 
 
 states, inputs, timing = Dict(), Dict(), Dict()      # Initialise solutions
+testing = Dict()
 
-
-
+agent_procs = Dict(i=>workers()[i] for i = 1:parameters[1])
 
 
 
 if solve_method == 1
 
-    states, inputs = remotecall_fetch(centralised, 2, parameters)
+    @time states, inputs = remotecall_fetch(centralised, 2, parameters)
+
+
+
+
 
 elseif solve_method == 2
 
-
-    agent_procs = Dict(i=>workers()[i] for i = 1:parameters[1])
-    @sync for sys = 1:num_cars
-
+    @time @sync for sys = 1:num_cars
         @async states[sys], inputs[sys], timing[sys] = remotecall_fetch(smallest_neighbourhood, agent_procs[sys],
                                                    sys, hub, parameters, neighbours[sys], iter_limit = iter_limit)
+    end
+
+    println("TOTAL TIME TO COMPLETION: ", mean([timing[j] for j = 1:num_cars]))
+
+
+
+
+
+elseif solve_method == 3
+
+    @sync for sys = 1:num_cars
+        @async states[sys], inputs[sys], testing[sys] = remotecall_fetch(consensus, agent_procs[sys],
+                                                                         sys, parameters, neighbours[sys])
+    end
+
+
+    history = Dict()
+    for i = 1:num_cars
+        history[i] = testing[i]
+    end
+
+    iterations = 2
+    violation = Array{Float64, 1}(undef, iterations)
+    for k = 1:iterations
+        tracking = [history[i][k] for i = 1:num_cars]
+        d = []
+        for j = 1:num_cars-1
+            a = coupled_inequalities(tracking[j], tracking[j+1], parameters)
+            b = findall(i->i>0, a)
+            c = [a[i] for i in b]
+            d = vcat(d, c)
+        end
+        a = coupled_inequalities(tracking[num_cars], tracking[1], parameters, true)
+        b = findall(i->i>0, a)
+        c = [a[i] for i in b]
+        d = vcat(d,c)
+        violation[k] = norm(d)
 
     end
 
-	println("TOTAL TIME TO COMPLETION: ", mean([timing[j] for j = 1:num_cars]))
 
 end
 
 
 
 
+
+
 t = range(0,stop=T,length=N+1)
 trajectories = [states[i][1, :] for i = 1:num_cars]
-inputs = [inputs[i] for i = 1:num_cars]
-
-
+inputsworkers = [inputs[i] for i = 1:num_cars]
 
 trajectoryPlot = plot(t, trajectories, legend=false)
 display(trajectoryPlot)
 
 
+resplot = plot(1:iterations, violation, xlab="Iterations", ylab="Coupled residual")
+
 
 # Find input cost
 inputCost = sum(sum([inputs[i] .* inputs[i] for i = 1:num_cars]))
 println("Input cost = ", inputCost)
+

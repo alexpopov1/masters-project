@@ -62,15 +62,6 @@ end
     # Lower bound for control inputs
     constraints[1:N] = [u[1, k]^2 + u[2, k]^2 - umax for k = 1:N]
 
-#=
-    constraints[1:N] = [umin - u[1, k] for k = 1:N]  
-    constraints[N+1:2N] = [umin - u[2, k] for k = 1:N]   
-
-    # Upper bound for control inputs
-    constraints[2N+1:3N] = [u[1, k] - umax for k = 1:N] 
-    constraints[3N+1:4N] = [u[2, k] - umax for k = 1:N]    
-=#
-
     # Maximum speed
     constraints[N+1:2N] = [(x[3, k] + x[4, k])^2 - vmax^2 for k = 1:N]
 

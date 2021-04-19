@@ -1,5 +1,5 @@
 """
-Consensus algorithm and some required functions, applicable to vehicle platoon problem
+ADMM algorithm and some required functions, applicable to vehicle platoon problem
 """
 
 using Distributed
@@ -95,12 +95,12 @@ end
 
 
 
-@everywhere function consistency(model::Model, Z_dict::Dict, nhood::Array)
+@everywhere function consistency(model::Model, Z_dict::Dict, nhood::Array, rho::Int, lambda::Array)
 
     X = vcat([model[:x][j] for j in nhood]...)
     Z = vcat([Z_dict[j] for j in nhood]...)
     
-    @objective(model, Min, sum(sum([model[:u][j].^2 for j in nhood])) + sum((X-Z).^2))
+    @objective(model, Min, sum(sum([model[:u][j].^2 for j in nhood])) + sum(lambda.*(X-Z)) + 0.5*rho*sum((X-Z).^2))
     
     nothing
 
@@ -116,9 +116,9 @@ end
 
 
 
-@everywhere function solve_problem(model::Model, Z_dict::Dict, nhood::Array, stored_mean::Bool)
+@everywhere function solve_problem(model::Model, Z_dict::Dict, nhood::Array, stored_mean::Bool, rho::Int, lambda::Array)
 
-    stored_mean && consistency(model, Z_dict, nhood)
+    stored_mean && consistency(model, Z_dict, nhood, rho, lambda)
 
     optimise_model(model)
     X_dict, U_dict = Dict(), Dict()
@@ -189,35 +189,46 @@ end
 
 
 
-@everywhere function hub_exchange(sys::Int, hub::Int, SOLVED::Bool, agent_procs::Dict, num_cars::Int)
+@everywhere function hub_exchange(sys::Int, hub::Int, solution::Array, agent_procs::Dict, parameters::Tuple)
+
+
+    num_cars, _ = parameters
+
 
     if sys != hub
 
-	put!(to_hub, SOLVED)
+	put!(to_hub, solution)
         remotecall_fetch(wait, agent_procs[hub], @spawnat(agent_procs[hub], from_hub))
-        ALL_SOLVED = fetch(@spawnat(agent_procs[hub], take!(from_hub)))
+        SOLVED = fetch(@spawnat(agent_procs[hub], take!(from_hub)))
 
     else
 
-        agent_check = Dict()
-        agent_check[hub] = SOLVED
+        agent_solution = Dict()
+        agent_solution[hub] = solution
+
 
         @sync for j in filter(x->x!=hub, Array(1:num_cars))
             @async begin
                 remotecall_fetch(wait, agent_procs[j], @spawnat(agent_procs[j], to_hub))
-                agent_check[j] = fetch(@spawnat(agent_procs[j], take!(to_hub)))
+                agent_solution[j] = fetch(@spawnat(agent_procs[j], take!(to_hub)))
             end
         end
 
-        ALL_SOLVED = false in [agent_check[j] for j = 1:num_cars] ? false : true
-        println("ALL_SOLVED = ", ALL_SOLVED)
+        con_vals = [coupled_inequalities(agent_solution[i], agent_solution[i%num_cars+1],
+                          parameters, i == num_cars ? true : false) for i = 1:num_cars]
+
+        SOLVED = maximum([maximum(con_vals[i]) for i = 1:num_cars]) <= 0 ? true : false
+
+
+        # SOLVED = false
+        println("SOLVED = ", SOLVED)
         for _ in 1:num_cars-1
-            put!(from_hub, ALL_SOLVED)
+            put!(from_hub, SOLVED)
 	end
 
     end
 
-    return ALL_SOLVED
+    return SOLVED
 
 end
 
@@ -248,8 +259,8 @@ end
 
 
 
-@everywhere function consensus(sys::Int, hub::Int, parameters::Tuple, neighbours::Array; 
-                               agent_procs::Dict = Dict(i=>sort(workers())[i] for i = 1:parameters[1]))
+@everywhere function ADMM(sys::Int, hub::Int, parameters::Tuple, neighbours::Array; rho::Int = 1,
+                          agent_procs::Dict = Dict(i=>sort(workers())[i] for i = 1:parameters[1]))
                           
 
     # Define constant parameters 
@@ -266,10 +277,10 @@ end
     Z = Array{Float64, 2}(undef, 2*length(nhood), N+1)
     X_dict, U_dict, Z_dict, history = Dict(), Dict(), Dict(), Dict()
     x_sys = Any[]
+    lambda = zeros(2 * length(nhood), N+1)
 
 
-
-
+    # Initialise channels for global communication
     if sys == hub
         global from_hub = Channel{Bool}(num_cars-1)
     else
@@ -284,9 +295,10 @@ end
 
 
 
+
     iteration = 1
 
-    while iteration <= 20
+    while iteration <= 5
 
         # BEGIN TIMING LOOP
         loop = @elapsed begin
@@ -302,8 +314,8 @@ end
 
         # Solve problem 
         stored_mean = iteration == 1 ? false : true
-        X_dict, U_dict = solve_problem(model, Z_dict, nhood, stored_mean)
-        
+        X_dict, U_dict = solve_problem(model, Z_dict, nhood, stored_mean, rho, lambda)
+        println("problem solved")
 
         # Gather assumed trajectories from neighbours, and broadcast trajectories to neigbours
         x_sys = x_exchange(X_dict, sys, neighbours, agent_procs)
@@ -316,9 +328,13 @@ end
         # Gather z values from neighbours (and broadcast to neighbours) to construct Z
         Z_dict = z_exchange(z, sys, neighbours, agent_procs)
 
+        # ADMM lambda update
+        X = vcat([X_dict[j] for j in nhood]...)
+        Z = vcat([Z_dict[j] for j in nhood]...)
+        lambda = lambda + rho * (X-Z)
 
-        SOLVED = false 
-        ALL_SOLVED = hub_exchange(sys, hub, SOLVED, agent_procs, num_cars)
+        solution = X_dict[sys]
+        SOLVED = hub_exchange(sys, hub, solution, agent_procs, parameters)
 
         history[iteration] = X_dict[sys]
 
@@ -330,6 +346,12 @@ end
 
 
         println("Iteration ", iteration, " complete: ", loop)
+
+
+        if SOLVED
+            break
+        end
+
         iteration += 1
 
 
@@ -343,5 +365,3 @@ end
 
 
 end
-
-

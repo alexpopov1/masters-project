@@ -105,6 +105,7 @@ solve_method = 3                                       # Solve method flag
 # 1: centralised
 # 2: smallest neighbour
 # 3: consensus
+# 4: ADMM
 
 # ****************************************************************************************************************
 
@@ -168,7 +169,7 @@ elseif solve_method == 3
     end
 
     println("Total time: ", maximum([timing[i] for i = 1:num_cars]))
-    iterations = 5
+    iterations = 20
     violation_norm = Array{Float64, 1}(undef, iterations)
 
     for k = 1:iterations
@@ -190,6 +191,38 @@ elseif solve_method == 3
 
     end
     
+
+
+elseif solve_method == 4
+
+    @sync for sys = 1:num_cars
+        @async states[sys], inputs[sys], history[sys], timing[sys] = remotecall_fetch(ADMM, agent_procs[sys],
+                                                                         sys, hub, parameters, neighbours[sys])
+    end
+
+
+    println("Total time: ", maximum([timing[i] for i = 1:num_cars]))
+    iterations = length(history[1])
+    violation_norm = Array{Float64, 1}(undef, iterations)
+
+    for k = 1:iterations
+
+        tracking = [history[i][k] for i = 1:num_cars]
+        violation_vector = []
+
+        for j = 1:num_cars
+
+            islap = j == num_cars ? true : false
+            con_values = coupled_inequalities(tracking[j], tracking[j%num_cars+1], parameters, islap)
+            indices = findall(i->i>0, con_values)            
+            violations = isempty(indices) ? [0] : [con_values[i] for i in indices]
+            violation_vector = vcat(violation_vector, violations)
+
+        end
+
+        violation_norm[k] = norm(violation_vector)
+
+    end
 
 end
 

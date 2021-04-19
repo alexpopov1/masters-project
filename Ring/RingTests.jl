@@ -63,10 +63,13 @@ end
 
 
 
+
+
+
 # ****************************************************************************************************************
 
 # MODEL PROPERTIES
-num_cars = 8                                        # Number of cars
+num_cars = 8                                           # Number of cars
 dstart = Array(range(8, stop = 8, length = num_cars))  # Relative starting positions
 dsep = 2                                               # Initial and final distance between consecutive cars
 D = 500                                                # Total distance travelled by each car
@@ -76,9 +79,9 @@ umax = 0.1                                             # Maximum force
 umin = -0.2                                            # Minimum force
 vmax = 200                                             # Maximum velocity
 vmin = -vmax                                           # Minimum velocity
-T = 100                                              # Fixed time horizon
+T = 100                                                # Fixed time horizon
 N = 10 * T                                             # Number of time discretisations
-# v1 = v2 = Array(range(0, stop=0, length=num_cars))    # Initial velocities
+# v1 = v2 = Array(range(0, stop=0, length=num_cars))   # Initial velocities
 # v1 = [([[1,0,-1], repeat([0],num_cars-3)]...)...]
 v1 = [0, 2, 1, 0, -1, -2, 0, 0] 
 v2 = Array(range(0, stop=0, length=num_cars))          # Terminal velocities
@@ -94,17 +97,21 @@ hub = Int(ceil(num_cars/2))                            # Hub agent
 
 
 # SOLVER PROPERTIES (see KEY)
-iter_limit = 100                                    # Ipopt iteration limit
-solve_method = 3                           # Solve method flag
+iter_limit = 100                                       # Ipopt iteration limit
+solve_method = 3                                       # Solve method flag
 
 
 # KEY
 # 1: centralised
 # 2: smallest neighbour
-
-
+# 3: consensus
 
 # ****************************************************************************************************************
+
+
+
+
+
 
 
 
@@ -123,14 +130,12 @@ atot = D / radius
 
 parameters = num_cars, T, N, (umin, umax), (omega_min, omega_max), (omega1, omega2), astart, amin, asep, atot
 neighbours = make_neighbourhood(num_cars, num_followers, num_leaders)
-
-
-
-
-states, inputs, timing = Dict(), Dict(), Dict()      # Initialise solutions
-testing = Dict()
-
 agent_procs = Dict(i=>workers()[i] for i = 1:parameters[1])
+
+states, inputs,  = Dict(), Dict()   
+timing, testing, history = Dict(), Dict(), Dict() 
+
+
 
 
 
@@ -158,35 +163,33 @@ elseif solve_method == 2
 elseif solve_method == 3
 
     @sync for sys = 1:num_cars
-        @async states[sys], inputs[sys], testing[sys] = remotecall_fetch(consensus, agent_procs[sys],
-                                                                         sys, parameters, neighbours[sys])
+        @async states[sys], inputs[sys], history[sys], timing[sys] = remotecall_fetch(consensus, agent_procs[sys],
+                                                                         sys, hub, parameters, neighbours[sys])
     end
 
+    println("Total time: ", maximum([timing[i] for i = 1:num_cars]))
+    iterations = 5
+    violation_norm = Array{Float64, 1}(undef, iterations)
 
-    history = Dict()
-    for i = 1:num_cars
-        history[i] = testing[i]
-    end
-
-    iterations = 2
-    violation = Array{Float64, 1}(undef, iterations)
     for k = 1:iterations
+
         tracking = [history[i][k] for i = 1:num_cars]
-        d = []
-        for j = 1:num_cars-1
-            a = coupled_inequalities(tracking[j], tracking[j+1], parameters)
-            b = findall(i->i>0, a)
-            c = [a[i] for i in b]
-            d = vcat(d, c)
+        violation_vector = []
+
+        for j = 1:num_cars
+
+            islap = j == num_cars ? true : false
+            con_values = coupled_inequalities(tracking[j], tracking[j%num_cars+1], parameters, islap)
+            indices = findall(i->i>0, con_values)
+            violations = [con_values[i] for i in indices]
+            violation_vector = vcat(violation_vector, violations)
+
         end
-        a = coupled_inequalities(tracking[num_cars], tracking[1], parameters, true)
-        b = findall(i->i>0, a)
-        c = [a[i] for i in b]
-        d = vcat(d,c)
-        violation[k] = norm(d)
+
+        violation_norm[k] = norm(violation_vector)
 
     end
-
+    
 
 end
 
@@ -202,8 +205,8 @@ inputsworkers = [inputs[i] for i = 1:num_cars]
 trajectoryPlot = plot(t, trajectories, legend=false)
 display(trajectoryPlot)
 
-
-resplot = plot(1:iterations, violation, xlab="Iterations", ylab="Coupled residual")
+scaled_error = violation_norm / violation_norm[1]
+resplot = plot(1:iterations, scaled_error, xlab="Iterations", ylab="Scaled error", legend=false)
 
 
 # Find input cost

@@ -13,6 +13,7 @@ include("FormationModel.jl")
 include("Centralised.jl")
 include("SmallestNeighbourhood.jl")
 include("Consensus.jl")
+include("ADMM.jl")
 
 
 @everywhere function make_graph(num::Int, init::Array, num_of_neighbours::Int)
@@ -26,9 +27,9 @@ include("Consensus.jl")
             distance[j] = sqrt((init[i][1]-init[j][1])^2 + (init[i][2]-init[j][2])^2)
         end
 
-        rank = [sort(collect(distance), by=x->x[2])[j][1] for j=1:num-1]
+        # rank = [sort(collect(distance), by=x->x[2])[j][1] for j=1:num-1]
         # neighbours[i] = rank[1:num_of_neighbours]
-        neighbours[i] = [j for j in filter(x->x!=i, Array(1:num)) if distance[j] <= 8]
+        neighbours[i] = [j for j in filter(x->x!=i, Array(1:num)) if distance[j] <= 3]
 
     end
 
@@ -53,36 +54,46 @@ v_final = [2, 0]    # Final velocity
 umax = 0.15         # Maximum input
 vmax = 5            # Maximum speed
 
-xc, yc = 50, 10     # Centre coordinates of terminal circle
+xc, yc = 50, 7     # Centre coordinates of terminal circle
 rc = 0.75           # Radius of terminal circle
 
 init = [[0, 1, 1, 0.2],        # Initial conditions                      
-        [7, 3, 1, 0.15],
-        [-1, 5, 1, 0.1],
+        [0, 3, 1, 0.15],
+        [0, 5, 1, 0.1],
         [0, 7, 1, 0.05],
-        [2, 12, 1, 0],
-        [-3, 13, 1, -0.05],
-        [1, 16, 1, -0.1],
-        [6, 20, 1, -0.15]]
+        [0, 9, 1, 0],
+        [0, 11, 1, -0.05],
+        [0, 13, 1, -0.1],
+        [0, 15, 1, -0.15]]
 
-num_of_neighbours = 3
+num_of_neighbours = 2
 
 
 iter_limit = 1000
+solve_method = 4
 
 
-solve_method = 3
+# KEY
+# 1: centralised
+# 2: smallest neighbour
+# 3: consensus
+# 4: ADMM
 
 # ****************************************************************************************************************
 
 
 
+
+
+
+
 neighbours = make_graph(num, init, num_of_neighbours)
+
 parameters = num, T, N, init, v_final, (umax, vmax, rmin, xc, yc, rc)
-states, inputs, timing = Dict(), Dict(), Dict()
 agent_procs = Dict(i=>workers()[i] for i = 1:parameters[1])
 
-testing = Dict()
+states, inputs = Dict(), Dict()
+timing, testing, history = Dict(), Dict(), Dict()
 
 
 
@@ -104,21 +115,18 @@ elseif solve_method == 2
 
 
 
-
 elseif solve_method == 3
 
+
     @sync for sys = 1:num
-        @async states[sys], inputs[sys], testing[sys] = remotecall_fetch(consensus, agent_procs[sys],
-                                                                         sys, parameters, neighbours[sys])
+        @async states[sys], inputs[sys], history[sys], timing[sys] = remotecall_fetch(consensus, agent_procs[sys],
+                                                                         sys, hub, parameters, neighbours[sys])
     end
 
-
-    history = Dict()
-    for i = 1:num
-        history[i] = testing[i]
-    end
-
-    iterations = 2
+#=
+    
+    println("Total time: ", maximum([timing[i] for i = 1:num]))
+    iterations = length(history[1])
     violation_norm = Array{Float64, 1}(undef, iterations)
 
     for k = 1:iterations
@@ -129,6 +137,48 @@ elseif solve_method == 3
         violation_norm[k] = norm(violations)
     end
 
+    scaled_error = violation_norm / violation_norm[1]
+    resplot = plot(1:iterations, scaled_error, xlab="Iterations", ylab="Scaled error", legend=false)
+
+=#
+
+
+elseif solve_method == 4
+
+    @sync for sys = 1:num
+        @async states[sys], inputs[sys], history[sys], timing[sys] = remotecall_fetch(ADMM, agent_procs[sys],
+                                                                         sys, hub, parameters, neighbours[sys])
+    end
+
+
+end
+
+
+
+if solve_method in [3, 4]
+   
+    println("Total time: ", maximum([timing[i] for i = 1:num]))
+    iterations = length(history[1])
+    violation_norm = Array{Float64, 1}(undef, iterations)
+    prim_res_norm = Array{Float64, 1}(undef, iterations)
+
+    for k = 1:iterations
+
+        x_track = Dict(i=>history[i][k][1] for i = 1:num)
+        z_track = Dict(i=>history[i][k][2] for i = 1:num)
+        con_values = coupled_inequalities(x_track, pairing(Array(1:num)), parameters)
+        indices = findall(val->val>0, con_values)
+        violations = [con_values[i] for i in indices]
+        violation_norm[k] = norm(violations)
+        prim_res_norm[k] = norm(vcat([(x_track[i] - z_track[i]) for i = 1:num]...))
+
+    end
+
+
+    scaled_error = violation_norm / violation_norm[1]
+    scaled_residual = prim_res_norm / prim_res_norm[1]
+    viplot = plot(1:iterations, scaled_error, xlab="Iterations", ylab="Scaled error", legend=false)
+    resplot = plot(1:iterations, scaled_residual, xlab="Iterations", ylab="Scaled consensus residual", legend=false)
 
 end
 
@@ -145,7 +195,6 @@ for pair in agent_pairs
         push!(critical_pairs, pair)
     end
 end
-
 
 
 
@@ -179,10 +228,9 @@ end
 display(trajectory_plot)
 
 
-
-
-
-
+# Find input cost
+inputCost = sum(sum([inputs[i] .* inputs[i] for i = 1:num]))
+println("Input cost = ", inputCost)
 
 
 

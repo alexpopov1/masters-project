@@ -155,7 +155,9 @@ function algorithm(sys::Int, hub::Int, parameters::Tuple, neighbours::Array;
 
         # Check global solution via hub agent
         solution = X_dict[sys]
-        SOLVED = hub_exchange(sys, hub, solution, agent_procs, parameters)
+        new_agents = sys in fixed ? setdiff(nhood, fixed) : []
+        SOLVED = hub_exchange(sys, hub, solution, agent_procs, parameters, new_agents, fixed)
+
         if SOLVED
             break
         end
@@ -175,6 +177,7 @@ function algorithm(sys::Int, hub::Int, parameters::Tuple, neighbours::Array;
             model = reduced_model(X_fixed, nhood, parameters)  
         end  
 
+#=
         if iteration == 1
             fixed = [2,3,4]
         elseif iteration == 2
@@ -186,7 +189,7 @@ function algorithm(sys::Int, hub::Int, parameters::Tuple, neighbours::Array;
         elseif iteration >= 5
             fixed = Array(1:8)
         end      
-        
+=#       
 
         history[iteration] = X_dict[sys]
 
@@ -211,5 +214,3 @@ function algorithm(sys::Int, hub::Int, parameters::Tuple, neighbours::Array;
 
 
 end
-
-

@@ -1,4 +1,5 @@
 
+
 using Distributed
 include("RingModel.jl")
 
@@ -6,7 +7,9 @@ include("RingModel.jl")
 
 
 
-function hub_exchange(sys::Int, hub::Int, solution::Array, agent_procs::Dict, parameters::Tuple)
+
+
+function hub_exchange(sys::Int, hub::Int, solution::Array, agent_procs::Dict, parameters::Tuple, new_agents::Array, fixed::Array)
 
 
     num_cars, _ = parameters
@@ -14,20 +17,20 @@ function hub_exchange(sys::Int, hub::Int, solution::Array, agent_procs::Dict, pa
 
     if sys != hub
 
-	put!(to_hub, solution)
+	put!(to_hub, (solution, new_agents))
         remotecall_fetch(wait, agent_procs[hub], @spawnat(agent_procs[hub], from_hub))
-        SOLVED = fetch(@spawnat(agent_procs[hub], take!(from_hub)))
+        SOLVED, fixed = fetch(@spawnat(agent_procs[hub], take!(from_hub)))
 
     else
 
-        agent_solution = Dict()
+        agent_solution, new_additions = Dict(), Dict()
         agent_solution[hub] = solution
-
+        new_additions[hub] = new_agents
 
         @sync for j in filter(x->x!=hub, Array(1:num_cars))
             @async begin
                 remotecall_fetch(wait, agent_procs[j], @spawnat(agent_procs[j], to_hub))
-                agent_solution[j] = fetch(@spawnat(agent_procs[j], take!(to_hub)))
+                agent_solution[j], new_additions[j] = fetch(@spawnat(agent_procs[j], take!(to_hub)))
             end
         end
 
@@ -35,15 +38,29 @@ function hub_exchange(sys::Int, hub::Int, solution::Array, agent_procs::Dict, pa
                           parameters, i == num_cars ? true : false) for i = 1:num_cars]
 
         SOLVED = maximum([maximum(con_vals[i]) for i = 1:num_cars]) <= 0 ? true : false
-
+        fixed = union(vcat(values(new_additions)...))
 
         println("SOLVED = ", SOLVED)
         for _ in 1:num_cars-1
-            put!(from_hub, SOLVED)
+            put!(from_hub, (SOLVED, fixed))
 	end
 
     end
 
+    return SOLVED, fixed
+
+end
+
+
+
+
+
+
+
+
+function hub_exchange(sys::Int, hub::Int, solution::Array, agent_procs::Dict, parameters::Tuple)
+
+    SOLVED, _ = hub_exchange(sys::Int, hub::Int, solution::Array, agent_procs::Dict, parameters::Tuple, [], [])
     return SOLVED
 
 end
@@ -89,7 +106,7 @@ function x_exchange(X_dict::Dict, U_dict::Dict, sys::Int, neighbours::Array, age
         @async begin
             put!(getfield(Main, Symbol("chx", j)), (X_dict, U_dict))
             remotecall_fetch(wait, agent_procs[j], @spawnat(agent_procs[j], getfield(Main, Symbol("chx", sys))))
-            x_from[j], u_from[j] = fetch(@spawnat(agent_procs[j], fetch(getfield(Main, Symbol("chx", sys)))))
+            x_from[j], u_from[j],  = fetch(@spawnat(agent_procs[j], fetch(getfield(Main, Symbol("chx", sys)))))
         end
     end 
 
@@ -119,6 +136,10 @@ function z_exchange(z::Array, sys::Int, neighbours::Array, agent_procs::Dict)
     return Z_dict
 
 end
+
+
+
+
 
 
 

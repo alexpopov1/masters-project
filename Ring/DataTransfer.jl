@@ -38,7 +38,7 @@ function hub_exchange(sys::Int, hub::Int, solution::Array, agent_procs::Dict, pa
                           parameters, i == num_cars ? true : false) for i = 1:num_cars]
 
         SOLVED = maximum([maximum(con_vals[i]) for i = 1:num_cars]) <= 0 ? true : false
-        fixed = union(vcat(values(new_additions)...))
+        fixed = union(fixed, union(vcat(values(new_additions)...)))
 
         println("SOLVED = ", SOLVED)
         for _ in 1:num_cars-1
@@ -136,12 +136,6 @@ function z_exchange(z::Array, sys::Int, neighbours::Array, agent_procs::Dict)
     return Z_dict
 
 end
-
-
-
-
-
-
 
 
 

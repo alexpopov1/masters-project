@@ -1,3 +1,4 @@
+
 """
 Alternative consensus algorithm and some required functions, applicable to vehicle platoon problem
 """
@@ -115,14 +116,14 @@ function algorithm(sys::Int, hub::Int, parameters::Tuple, neighbours::Array;
 
 
     if sys == hub
-        global from_hub = Channel{Bool}(num_cars-1)
+        global from_hub = Channel{Any}(num_cars-1)
     else
         global to_hub = Channel{Any}(1)
     end
 
 
+    subgraph = []
     fixed = [3]
-
 
 
     # BEGIN TIMING TOTAL TIME IN WHILE LOOP
@@ -144,7 +145,7 @@ function algorithm(sys::Int, hub::Int, parameters::Tuple, neighbours::Array;
             Core.eval(Main, Expr(:(=), Symbol("chx", j), Channel{Any}(1)))
         end
        
-
+        println("fixed: ", fixed)
         # Solve problem 
         stored_mean = iteration == 1 ? false : true
         X_dict, U_dict = solve_problem(model, X_fixed, U_fixed, nhood, stored_mean, sys)   
@@ -156,11 +157,15 @@ function algorithm(sys::Int, hub::Int, parameters::Tuple, neighbours::Array;
         # Check global solution via hub agent
         solution = X_dict[sys]
         new_agents = sys in fixed ? setdiff(nhood, fixed) : []
-        SOLVED = hub_exchange(sys, hub, solution, agent_procs, parameters, new_agents, fixed)
-
+        
+        SOLVED, subgraph = hub_exchange(sys, hub, solution, agent_procs, parameters, new_agents, fixed)
+        
         if SOLVED
             break
         end
+
+
+
 
         X_fixed = Dict()
 
@@ -176,20 +181,8 @@ function algorithm(sys::Int, hub::Int, parameters::Tuple, neighbours::Array;
             end  
             model = reduced_model(X_fixed, nhood, parameters)  
         end  
-
-#=
-        if iteration == 1
-            fixed = [2,3,4]
-        elseif iteration == 2
-            fixed = [1,2,3,4,5]
-        elseif iteration == 3
-            fixed = [1,2,3,4,5,6]
-        elseif iteration == 4
-            fixed = Array(1:7)
-        elseif iteration >= 5
-            fixed = Array(1:8)
-        end      
-=#       
+   
+        fixed = subgraph
 
         history[iteration] = X_dict[sys]
 

@@ -1,38 +1,10 @@
 
-
-
-
-using Distributed
-
+using JuMP, Ipopt
 
 
 
 
-@everywhere function initialise(sys::Int, parameters::Tuple)
-
-    numCars, T, N, _, _, (omega1, omega2), astart = parameters
-
-    states = Array{Float64, 2}(undef, 2, N+1)
-    states[1, 1] = sum(astart[1:sys])
-    states[2, 1] = omega1[sys]
-    inputs = zeros(N)
-
-    for k = 1:N
-        states[1, k+1]  = states[1, k] + (T/N) * states[2, k]
-        states[2, k+1] = states[2, k] + (T/N) * inputs[k]
-    end
-
-    return states, inputs
-
-end
-
-
-
-
-
-
-
-@everywhere function ordering(nhood::Array)
+function ordering(nhood::Array)
 
     order = sort(nhood)
     for i = 1:length(order)-1
@@ -54,7 +26,7 @@ end
 
 
 
-@everywhere function ordering_new_neighbourhood(nhood::Array{Int, 1}, prev_nhood::Array{Int, 1}, parameters::Tuple)
+function ordering_new_neighbourhood(nhood::Array{Int, 1}, prev_nhood::Array{Int, 1}, parameters::Tuple)
 
     _, _, N = parameters
     
@@ -80,6 +52,18 @@ end
 
 
 
+
+
+
+function nhood_mean(dict::Dict, sys::Int, nhood::Array)
+
+    agg = zeros(size(dict[nhood[1]]))
+    for j in nhood
+        agg += dict[j]
+    end
+    return agg / length(nhood)
+
+end
     
 
     
@@ -89,7 +73,7 @@ end
 
 
 
-@everywhere function equalities(sys::Int, x::Array, u::Array, parameters::Tuple)
+function equalities(sys::Int, x::Array, u::Array, parameters::Tuple)
     
     num_cars, T, N, _, _, (omega1, omega2), astart, _, asep, atot  = parameters
 
@@ -114,7 +98,7 @@ end
 
 
 
-@everywhere function uncoupled_inequalities(x::Array, u::Array, parameters::Tuple)
+function uncoupled_inequalities(x::Array, u::Array, parameters::Tuple)
 
     _, _, N, (umin, umax), (omegaMin, omegaMax) = parameters
 
@@ -137,7 +121,7 @@ end
 
 
 
-@everywhere function coupled_inequalities(x_behind::Array, x_ahead::Array, parameters::Tuple, is_lap=false)
+function coupled_inequalities(x_behind::Array, x_ahead::Array, parameters::Tuple, is_lap=false)
 
     _, _, N, _, _, _, _, amin = parameters
 
@@ -156,7 +140,7 @@ end
 
 
 
-@everywhere function base_model(sys::Int, parameters::Tuple, iter_limit::Int = 1000)
+function base_model(sys::Int, parameters::Tuple, iter_limit::Int = 1000)
 
     _, _, N = parameters
 
@@ -186,8 +170,7 @@ end
 
 
 
-
-@everywhere function update_model(model::Model, nhood::Array, 
+function update_model(model::Model, nhood::Array, 
                                   prev_nhood::Array, parameters::Tuple)
 
 
@@ -253,7 +236,22 @@ end
 
 
 
-@everywhere function optimise_model(model::Model)
+function model_setup(sys::Int, parameters::Tuple, nhood::Array)
+
+    _, _, N = parameters
+    model = base_model(sys, parameters)
+    update_model(model, nhood, [sys], parameters)
+    return model
+
+end
+
+
+
+
+
+
+
+function optimise_model(model::Model)
 
     set_silent(model)
     optimize!(model)

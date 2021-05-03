@@ -1,4 +1,3 @@
-
 # Required packages
 using Plots                               # For plotting results
 using Distributed                         # For parallelising
@@ -9,16 +8,17 @@ using LinearAlgebra                       # For norm calculation
 
 
 # Required files
-include("SmallestNeighbourhood.jl")
-include("Centralised.jl")
-include("ADMM.jl")
-include("Consensus.jl")
+@everywhere include("SmallestNeighbourhood.jl")
+@everywhere include("Centralised.jl")
+@everywhere include("ADMM.jl")
+@everywhere include("Consensus.jl")
+@everywhere include("Algorithm.jl")
+@everywhere include("RingModel.jl")
+@everywhere include("WarmStart.jl")
 
 
 
-
-
-@everywhere function make_neighbourhood(num_cars::Int, num_followers::Array{Int64, 1}, num_leaders::Array{Int64, 1})
+function make_neighbourhood(num_cars::Int, num_followers::Array{Int64, 1}, num_leaders::Array{Int64, 1})
 
     leaders = Array{Array{Int64}}(undef, num_cars)
     followers = Array{Array{Int64}}(undef, num_cars)
@@ -73,7 +73,7 @@ num_cars = 8                                           # Number of cars
 dstart = Array(range(8, stop = 8, length = num_cars))  # Relative starting positions
 dsep = 2                                               # Initial and final distance between consecutive cars
 D = 500                                                # Total distance travelled by each car
-radius = 110                                           # Radius of ring
+radius = 200                                           # Radius of ring
 dmin = 0.5                                             # Minimum distance between consecutive cars
 umax = 0.1                                             # Maximum force
 umin = -0.2                                            # Minimum force
@@ -83,14 +83,15 @@ T = 100                                                # Fixed time horizon
 N = 10 * T                                             # Number of time discretisations
 # v1 = v2 = Array(range(0, stop=0, length=num_cars))   # Initial velocities
 # v1 = [([[1,0,-1], repeat([0],num_cars-3)]...)...]
-v1 = [0, 2, 1, 0, -1, -2, 0, 0] 
+v1 = Array(range(5, stop=-5, length=num_cars))
 v2 = Array(range(0, stop=0, length=num_cars))          # Terminal velocities
 
 
 # GRAPH PROPERTIES
 num_followers = repeat([1], num_cars)                  # Number of leaders
 num_leaders = repeat([1], num_cars)                    # Number of followers
-
+num_followers[1] = 0
+num_leaders[num_cars] = 0
 # num_followers = [1, 1, 2, 3, 1, 1, 1, 1]
 # num_leaders = [3, 2, 1, 0, 1, 1, 1, 1]
 hub = Int(ceil(num_cars/2))                            # Hub agent
@@ -98,7 +99,7 @@ hub = Int(ceil(num_cars/2))                            # Hub agent
 
 # SOLVER PROPERTIES (see KEY)
 iter_limit = 100                                       # Ipopt iteration limit
-solve_method = 3                                       # Solve method flag
+solve_method = 5                                      # Solve method flag
 
 
 # KEY
@@ -106,6 +107,7 @@ solve_method = 3                                       # Solve method flag
 # 2: smallest neighbour
 # 3: consensus
 # 4: ADMM
+# 5: algorithm
 
 # ****************************************************************************************************************
 
@@ -163,43 +165,39 @@ elseif solve_method == 2
 
 elseif solve_method == 3
 
+    historyset = Dict()
     @sync for sys = 1:num_cars
-        @async states[sys], inputs[sys], history[sys], timing[sys] = remotecall_fetch(consensus, agent_procs[sys],
-                                                                         sys, hub, parameters, neighbours[sys])
-    end
-
-    println("Total time: ", maximum([timing[i] for i = 1:num_cars]))
-    iterations = 20
-    violation_norm = Array{Float64, 1}(undef, iterations)
-
-    for k = 1:iterations
-
-        tracking = [history[i][k] for i = 1:num_cars]
-        violation_vector = []
-
-        for j = 1:num_cars
-
-            islap = j == num_cars ? true : false
-            con_values = coupled_inequalities(tracking[j], tracking[j%num_cars+1], parameters, islap)
-            indices = findall(i->i>0, con_values)
-            violations = [con_values[i] for i in indices]
-            violation_vector = vcat(violation_vector, violations)
-
-        end
-
-        violation_norm[k] = norm(violation_vector)
-
+        @async states[sys], inputs[sys], historyset[sys], timing[sys] = remotecall_fetch(consensus, agent_procs[sys],
+                                                                         sys, hub, parameters, neighbours[sys],
+                                                                         max_iterations = 5)
     end
     
+    history = Dict(j=>Dict(i=>historyset[j][i][1] for i=1:length(historyset[1])) for j = 1:num_cars)
+    z_track = Dict(j=>Dict(i=>historyset[j][i][2] for i=1:length(historyset[1])) for j = 1:num_cars)
 
 
 elseif solve_method == 4
 
     @sync for sys = 1:num_cars
         @async states[sys], inputs[sys], history[sys], timing[sys] = remotecall_fetch(ADMM, agent_procs[sys],
-                                                                         sys, hub, parameters, neighbours[sys])
+                                                                         sys, hub, parameters, neighbours[sys],
+                                                                         max_iterations = 50)
     end
 
+
+elseif solve_method == 5
+
+    @sync for sys = 1:num_cars
+        @async states[sys], inputs[sys], history[sys], timing[sys], testing[sys] = remotecall_fetch(algorithm, agent_procs[sys],
+                                                                         sys, hub, parameters, neighbours[sys],
+                                                                         max_iterations = 6)
+    end
+
+end
+
+
+
+if solve_method in [3, 4, 5]
 
     println("Total time: ", maximum([timing[i] for i = 1:num_cars]))
     iterations = length(history[1])
@@ -245,4 +243,3 @@ resplot = plot(1:iterations, scaled_error, xlab="Iterations", ylab="Scaled error
 # Find input cost
 inputCost = sum(sum([inputs[i] .* inputs[i] for i = 1:num_cars]))
 println("Input cost = ", inputCost)
-

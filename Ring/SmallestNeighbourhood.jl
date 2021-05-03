@@ -4,12 +4,7 @@ Smallest Neighbourhood algorithm and some required functions, applicable to vehi
 platoon ring problem
 """
 
-
-using Distributed         # Distributed implementation
-@everywhere using JuMP    # Optimisation problem definition
-@everywhere using Ipopt   # Optimisation solver
-
-@everywhere include("RingModel.jl")
+include("RingModel.jl")
 
 
 
@@ -17,14 +12,12 @@ using Distributed         # Distributed implementation
 
 
 
-
-
-@everywhere function eval_collision_constraints(states_array::Array, indices::Array, parameters::Tuple)
+@everywhere function eval_collision_constraints(states::Array, indices::Array, parameters::Tuple)
 
     num_cars, _ = parameters
-    return [coupled_inequalities(states_array[i], states_array[i+1],
+    return [coupled_inequalities(states[i], states[i+1],
             parameters, indices[i] == num_cars ? true : false)
-            for i = 1:length(states_array)-1]
+            for i = 1:length(states)-1]
 
 end
 
@@ -38,11 +31,10 @@ end
 
 
 
-@everywhere function collisions(states_array::Array, indices::Array, parameters::Tuple)
+@everywhere function collisions(states::Array, indices::Array, parameters::Tuple)
 
     pairs= []
-    vals = eval_collision_constraints(states_array, indices, parameters)
-    # println("max value: ", maximum([maximum(vals[i]) for i = 1:length(vals)]))
+    vals = eval_collision_constraints(states, indices, parameters)
     for i = 1:length(vals)
         if maximum(vals[i]) > 0
             push!(pairs, (indices[i], indices[i+1]))
@@ -57,74 +49,7 @@ end
 
 
 
-
-
-
-
-@everywhere function warm_start(x::Array, u::Array, states::Array, inputs::Array)
-
-    # Set warm start for states
-    for j = 1:size(x)[1]
-        for k = 1:size(x)[2]
-            set_start_value(x[j,k], states[j,k])
-        end
-    end
-
-
-    # Set warm start for inputs
-    if ndims(u) == 1
-
-        for j = length(u)
-            set_start_value(u[j], inputs[j])
-        end
-
-    else
-
-        for j = 1:size(u)[1]
-            for k = 1:size(u)[2]
-                set_start_value(u[j,k], inputs[j,k])
-            end
-        end
-
-    end
-
-end
-
-
-
-
-
-
-
-
-
-
-@everywhere function warm_start(model::Model, parameters::Tuple, nhood::Array, prev_nhood::Array)
-
-    if has_values(model)
-
-        for i in prev_nhood
-            warm_start(model[:x][i], model[:u][i], value.(model[:x][i]), value.(model[:u][i]))
-        end
-
-        for i in setdiff(nhood, prev_nhood)
-            states, inputs = initialise(i, parameters)
-            warm_start(model[:x][i], model[:u][i], states, inputs)
-        end
-
-    else
-
-        for i in nhood
-            states, inputs = initialise(i, parameters)
-            warm_start(model[:x][i], model[:u][i], states, inputs)
-        end
-
-    end
-
-end
-
-
-
+    
 
 
 
@@ -171,7 +96,7 @@ store it in the dictionaries with the appropriate key.
 
 
 
-@everywhere function neighbour_exchange(sys::Int, opt_states::Array, nhood::Array, neighbours::Array, agent_procs::Dict)
+function neighbour_exchange(sys::Int, opt_states::Array, nhood::Array, neighbours::Array, agent_procs::Dict)
 
     nhood_solutions = Dict()
     nhood_solutions[sys] = opt_states
@@ -214,7 +139,7 @@ booleans have been taken, the hub determines the value of ALL_SOLVED, and then u
 
 
 
-@everywhere function hub_exchange(sys::Int, hub::Int, SOLVED::Bool, agent_procs::Dict, num_cars::Int)
+function hub_exchange(sys::Int, hub::Int, SOLVED::Bool, agent_procs::Dict, num_cars::Int)
 
     if sys != hub
 
@@ -255,7 +180,7 @@ end
 
 
 
-@everywhere function update_neighbourhood(nhood::Array, nhood_of_agents::Dict, colliding_pairs::Array)
+function update_neighbourhood(nhood::Array, nhood_of_agents::Dict, colliding_pairs::Array)
 
     for i in unique([(colliding_pairs...)...])
         union!(nhood, nhood_of_agents[i])
@@ -283,7 +208,7 @@ to include the full neighbourhoods of the pair.
 """
 
 
-@everywhere function smallest_neighbourhood(sys::Int, hub::Int, parameters::Tuple, neighbours::Array;
+function smallest_neighbourhood(sys::Int, hub::Int, parameters::Tuple, neighbours::Array;
                                             agent_procs::Dict = Dict(i=>sort(workers())[i] for i = 1:parameters[1]),
                                             iter_limit::Int=1000)
 
@@ -397,4 +322,29 @@ to include the full neighbourhoods of the pair.
     return opt_states, opt_inputs, totalloop-initialupdate
 
 end
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 

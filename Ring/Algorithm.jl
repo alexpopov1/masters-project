@@ -122,8 +122,8 @@ function algorithm(sys::Int, hub::Int, parameters::Tuple, neighbours::Array;
     end
 
 
-    subgraph = []
-    fixed = [3]
+
+    fixed = []
 
 
     # BEGIN TIMING TOTAL TIME IN WHILE LOOP
@@ -145,11 +145,10 @@ function algorithm(sys::Int, hub::Int, parameters::Tuple, neighbours::Array;
             Core.eval(Main, Expr(:(=), Symbol("chx", j), Channel{Any}(1)))
         end
        
-        println("fixed: ", fixed)
+
         # Solve problem 
         stored_mean = iteration == 1 ? false : true
-        X_dict, U_dict = solve_problem(model, X_fixed, U_fixed, nhood, stored_mean, sys)   
-
+        solve_time = @elapsed X_dict, U_dict = solve_problem(model, X_fixed, U_fixed, nhood, stored_mean, sys)   
 
         # Gather assumed trajectories from neighbours, and broadcast trajectories to neigbours
         x_from, u_from = x_exchange(X_dict, U_dict, sys, neighbours, agent_procs)
@@ -158,9 +157,10 @@ function algorithm(sys::Int, hub::Int, parameters::Tuple, neighbours::Array;
         solution = X_dict[sys]
         new_agents = sys in fixed ? setdiff(nhood, fixed) : []
         
-        SOLVED, subgraph = hub_exchange(sys, hub, solution, agent_procs, parameters, new_agents, fixed)
+        SOLVED, fixed = hub_exchange(sys, hub, solution, agent_procs, parameters, new_agents, fixed, solve_time)
         
         if SOLVED
+            println("Iteration ", iteration, " complete")
             break
         end
 
@@ -182,7 +182,6 @@ function algorithm(sys::Int, hub::Int, parameters::Tuple, neighbours::Array;
             model = reduced_model(X_fixed, nhood, parameters)  
         end  
    
-        fixed = subgraph
 
         history[iteration] = X_dict[sys]
 

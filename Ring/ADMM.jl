@@ -79,7 +79,7 @@ function ADMM(sys::Int, hub::Int, parameters::Tuple, neighbours::Array; rho::Flo
 
     # Initialise channels for global communication
     if sys == hub
-        global from_hub = Channel{Bool}(num_cars-1)
+        global from_hub = Channel{Any}(num_cars-1)
     else
         global to_hub = Channel{Any}(1)
     end
@@ -111,6 +111,8 @@ function ADMM(sys::Int, hub::Int, parameters::Tuple, neighbours::Array; rho::Flo
 
         # Solve problem 
         stored_mean = iteration == 1 ? false : true
+
+
         X_dict, U_dict = solve_problem(model, Z_dict, nhood, stored_mean, rho, lambda)
 
         # Gather assumed trajectories from neighbours, and broadcast trajectories to neigbours
@@ -128,8 +130,9 @@ function ADMM(sys::Int, hub::Int, parameters::Tuple, neighbours::Array; rho::Flo
         X = vcat([X_dict[j] for j in nhood]...)
         Z = vcat([Z_dict[j] for j in nhood]...)
         lambda = lambda + rho * (X-Z)
-
+          
         solution = X_dict[sys]
+
         SOLVED = hub_exchange(sys, hub, solution, agent_procs, parameters)
 
         history[iteration] = X_dict[sys]

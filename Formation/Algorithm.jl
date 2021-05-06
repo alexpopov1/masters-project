@@ -48,7 +48,7 @@ function reduced_model(X_fixed::Dict, nhood::Array, parameters::Tuple)
             end
         end
 
-        new_cons = coupled_inequalities(vars_and_constants, mixed_pairs, parameters
+        new_cons = coupled_inequalities(vars_and_constants, mixed_pairs, parameters)
 
 
         @constraint(model, vcat(new_cons...) .<= 0)

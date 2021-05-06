@@ -69,7 +69,7 @@ end
 # ****************************************************************************************************************
 
 # MODEL PROPERTIES
-num_cars = 8                                           # Number of cars
+num_cars = 32                                          # Number of cars
 dstart = Array(range(8, stop = 8, length = num_cars))  # Relative starting positions
 dsep = 2                                               # Initial and final distance between consecutive cars
 D = 500                                                # Total distance travelled by each car
@@ -83,7 +83,9 @@ T = 100                                                # Fixed time horizon
 N = 10 * T                                             # Number of time discretisations
 # v1 = v2 = Array(range(0, stop=0, length=num_cars))   # Initial velocities
 # v1 = [([[1,0,-1], repeat([0],num_cars-3)]...)...]
-v1 = Array(range(5, stop=-5, length=num_cars))
+v1 = [([reverse(Array(range(1, length=Int(num_cars/2), step=2))), 
+        Array(range(-1, length=Int(num_cars/2), step=-2))]...)...]
+
 v2 = Array(range(0, stop=0, length=num_cars))          # Terminal velocities
 
 
@@ -99,7 +101,7 @@ hub = Int(ceil(num_cars/2))                            # Hub agent
 
 # SOLVER PROPERTIES (see KEY)
 iter_limit = 100                                       # Ipopt iteration limit
-solve_method = 5                                      # Solve method flag
+solve_method = 5                                    # Solve method flag
 
 
 # KEY
@@ -181,7 +183,7 @@ elseif solve_method == 4
     @sync for sys = 1:num_cars
         @async states[sys], inputs[sys], history[sys], timing[sys] = remotecall_fetch(ADMM, agent_procs[sys],
                                                                          sys, hub, parameters, neighbours[sys],
-                                                                         max_iterations = 50)
+                                                                         rho = 1.0, max_iterations = 50)
     end
 
 
@@ -190,7 +192,7 @@ elseif solve_method == 5
     @sync for sys = 1:num_cars
         @async states[sys], inputs[sys], history[sys], timing[sys], testing[sys] = remotecall_fetch(algorithm, agent_procs[sys],
                                                                          sys, hub, parameters, neighbours[sys],
-                                                                         max_iterations = 6)
+                                                                         max_iterations = 50)
     end
 
 end

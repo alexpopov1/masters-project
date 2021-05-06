@@ -9,7 +9,7 @@ include("WarmStart.jl")
     model = base_model(1, parameters)
     update_model(model, Array(1:num), [1], parameters)
     warm_start(model, parameters, Array(1:num), [])
-    optimise_model(model)
+    @time optimise_model(model)
 
     states = Dict()
     inputs = Dict()

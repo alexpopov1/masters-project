@@ -1,5 +1,5 @@
 
-using Distributed
+using JuMP, Ipopt
 
 
 
@@ -23,6 +23,26 @@ using Distributed
     return states, inputs
 
 end
+
+
+
+
+
+
+
+
+@everywhere function nhood_mean(dict::Dict, sys::Int, nhood::Array)
+
+    agg = zeros(size(dict[nhood[1]]))
+    for j in nhood
+        agg += dict[j]
+    end
+    return agg / length(nhood)
+
+end
+
+
+
 
 
 
@@ -188,14 +208,25 @@ end
 
 
 
+@everywhere function model_setup(sys::Int, parameters::Tuple, nhood::Array)
+
+    _, _, N = parameters
+    model = base_model(sys, parameters)
+    update_model(model, nhood, [sys], parameters)
+
+    return model
+
+end
+
+
 
 
 
 @everywhere function optimise_model(model::Model)
 
-    #set_silent(model)
+    set_silent(model)
     optimize!(model)
-    # println(termination_status(model))
+    println(termination_status(model))
     nothing
    
 end

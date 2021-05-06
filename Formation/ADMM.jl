@@ -3,26 +3,9 @@
 ADMM algorithm and some required functions, applicable to formation problem
 """
 
-using Distributed
-@everywhere using JuMP
-@everywhere using Ipopt
 
-@everywhere include("FormationModel.jl")
-
-
-
-
-
-
-@everywhere function model_setup(sys::Int, parameters::Tuple, nhood::Array)
-
-    _, _, N = parameters
-    model = base_model(sys, parameters)
-    update_model(model, nhood, [sys], parameters)
-
-    return model
-
-end
+include("FormationModel.jl")
+include("DataTransfer.jl")
 
 
 
@@ -76,25 +59,6 @@ end
 
 
 
-# Upload sys assumptions of j, and fetch j assumptions of sys from j 
-
-@everywhere function x_exchange(X_dict::Dict, sys::Int, neighbours::Array, agent_procs::Dict)
-
-    x_sys = Dict()  
-    x_sys[sys] = X_dict[sys]
-
-
-    @sync for j in neighbours
-        @async begin
-            put!(getfield(Main, Symbol("chx", j)), X_dict[j])
-            remotecall_fetch(wait, agent_procs[j], @spawnat(agent_procs[j], getfield(Main, Symbol("chx", sys))))
-            x_sys[j] = fetch(@spawnat(agent_procs[j], fetch(getfield(Main, Symbol("chx", sys)))))
-        end
-    end 
-
-    return x_sys 
- 
-end
 
 
 
@@ -102,99 +66,7 @@ end
 
 
 
-
-
-@everywhere function z_exchange(z::Array, sys::Int, neighbours::Array, agent_procs::Dict)
-
-    Z_dict = Dict()
-    Z_dict[sys] = z
-
-    put!(chz, z) 
-    @sync for j in neighbours
-        @async begin
-            remotecall_fetch(wait, agent_procs[j], getfield(Main, :chz))
-            Z_dict[j] = fetch(@spawnat(agent_procs[j], fetch(getfield(Main, :chz))))
-        end
-    end
-
-    return Z_dict
-
-end
-
-
-
-
-
-
-
-
-@everywhere function hub_exchange(sys::Int, hub::Int, solution::Array, agent_procs::Dict, parameters::Tuple)
-
-
-    num, _ = parameters
-
-    if sys != hub
-
-	put!(to_hub, solution)
-        remotecall_fetch(wait, agent_procs[hub], @spawnat(agent_procs[hub], from_hub))
-        SOLVED = fetch(@spawnat(agent_procs[hub], take!(from_hub)))
-
-    else
-
-        agent_solution = Dict()
-        agent_solution[hub] = solution
-
-
-        @sync for j in filter(x->x!=hub, Array(1:num))
-            @async begin
-                remotecall_fetch(wait, agent_procs[j], @spawnat(agent_procs[j], to_hub))
-                agent_solution[j] = fetch(@spawnat(agent_procs[j], take!(to_hub)))
-            end
-        end
-
-
-        con_vals = [coupled_inequalities(agent_solution, pairing(Array(1:num)), parameters) for i = 1:num]
-        SOLVED = maximum([maximum(con_vals[i]) for i = 1:num]) <= 0 ? true : false
-
-        SOLVED = false
-
-        println("SOLVED = ", SOLVED)
-        for _ in 1:num-1
-            put!(from_hub, SOLVED)
-	end
-
-    end
-
-    return SOLVED
-
-end
-
-
-
-
-
-
-
-@everywhere function nhood_mean(dict::Dict, sys::Int, nhood::Array)
-
-    agg = zeros(size(dict[nhood[1]]))
-    for j in nhood
-        agg += dict[j]
-    end
-    return agg / length(nhood)
-
-end
-
-
-
-
-
-
-
-
-
-
-@everywhere function ADMM(sys::Int, hub::Int, parameters::Tuple, neighbours::Array; rho::Float64 = 0.1,
+@everywhere function ADMM(sys::Int, hub::Int, parameters::Tuple, neighbours::Array; rho::Float64 = 10.0,
                                agent_procs::Dict = Dict(i=>sort(workers())[i] for i = 1:parameters[1]))
                           
 
@@ -233,7 +105,7 @@ end
 
     iteration = 1
 
-    while iteration <= 20
+    while iteration <= 5
 
         # BEGIN TIMING LOOP
         loop = @elapsed begin

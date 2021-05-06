@@ -9,11 +9,13 @@ using LinearAlgebra                       # For norm calculation
 
 
 # Required files
-include("FormationModel.jl")
-include("Centralised.jl")
-include("SmallestNeighbourhood.jl")
-include("Consensus.jl")
-include("ADMM.jl")
+@everywhere include("SmallestNeighbourhood.jl")
+@everywhere include("Centralised.jl")
+@everywhere include("ADMM.jl")
+@everywhere include("Consensus.jl")
+@everywhere include("Algorithm.jl")
+@everywhere include("FormationModel.jl")
+@everywhere include("WarmStart.jl")
 
 
 @everywhere function make_graph(num::Int, init::Array, num_of_neighbours::Int)
@@ -70,7 +72,7 @@ num_of_neighbours = 2
 
 
 iter_limit = 1000
-solve_method = 4
+solve_method = 3
 
 
 # KEY
@@ -78,6 +80,7 @@ solve_method = 4
 # 2: smallest neighbour
 # 3: consensus
 # 4: ADMM
+# 5: algorithm
 
 # ****************************************************************************************************************
 
@@ -123,24 +126,7 @@ elseif solve_method == 3
                                                                          sys, hub, parameters, neighbours[sys])
     end
 
-#=
-    
-    println("Total time: ", maximum([timing[i] for i = 1:num]))
-    iterations = length(history[1])
-    violation_norm = Array{Float64, 1}(undef, iterations)
 
-    for k = 1:iterations
-        tracking = Dict(i=>history[i][k] for i = 1:num)
-        con_values = coupled_inequalities(tracking, pairing(Array(1:num)), parameters)
-        indices = findall(val->val>0, con_values)
-        violations = [con_values[i] for i in indices]
-        violation_norm[k] = norm(violations)
-    end
-
-    scaled_error = violation_norm / violation_norm[1]
-    resplot = plot(1:iterations, scaled_error, xlab="Iterations", ylab="Scaled error", legend=false)
-
-=#
 
 
 elseif solve_method == 4
@@ -151,11 +137,20 @@ elseif solve_method == 4
     end
 
 
+
+elseif solve_method == 5
+
+    @sync for sys = 1:num
+        @async states[sys], inputs[sys], history[sys], timing[sys], testing[sys] = remotecall_fetch(algorithm, agent_procs[sys],
+                                                                         sys, hub, parameters, neighbours[sys],
+                                                                         max_iterations = 50)
+    end
+
 end
 
 
 
-if solve_method in [3, 4]
+if solve_method in [3, 4, 5]
    
     println("Total time: ", maximum([timing[i] for i = 1:num]))
     iterations = length(history[1])

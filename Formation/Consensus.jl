@@ -3,41 +3,20 @@
 Consensus algorithm and some required functions, applicable to formation problem
 """
 
-using Distributed
-@everywhere using JuMP
-@everywhere using Ipopt
 
-@everywhere include("FormationModel.jl")
+include("FormationModel.jl")
+include("DataTransfer.jl")
 
 
 
 
 
-
-@everywhere function model_setup(sys::Int, parameters::Tuple, nhood::Array)
-
-    _, _, N = parameters
-    model = base_model(sys, parameters)
-    update_model(model, nhood, [sys], parameters)
-
-    return model
-
-end
-
-
-
-
-
-
-
-
-
-@everywhere function consistency(model::Model, Z_dict::Dict, nhood::Array)
+function consistency(model::Model, Z_dict::Dict, nhood::Array)
 
     X = vcat([model[:x][j] for j in nhood]...)
     Z = vcat([Z_dict[j] for j in nhood]...)
 
-    @objective(model, Min, sum(sum([model[:u][j].^2 for j in nhood])) + 2 * sum((X-Z).^2))
+    @objective(model, Min, sum(sum([model[:u][j].^2 for j in nhood])) + 10 * sum((X-Z).^2))
 
     nothing
 
@@ -53,7 +32,7 @@ end
 
 
 
-@everywhere function solve_problem(model::Model, Z_dict::Dict, nhood::Array, stored_mean::Bool)
+function solve_problem(model::Model, Z_dict::Dict, nhood::Array, stored_mean::Bool)
 
     stored_mean && consistency(model, Z_dict, nhood)
 
@@ -71,110 +50,6 @@ end
 
 
 
-
-
-
-
-
-# Upload sys assumptions of j, and fetch j assumptions of sys from j 
-
-@everywhere function x_exchange(X_dict::Dict, sys::Int, neighbours::Array, agent_procs::Dict)
-
-    x_sys = Dict()  
-    x_sys[sys] = X_dict[sys]
-
-
-    @sync for j in neighbours
-        @async begin
-            put!(getfield(Main, Symbol("chx", j)), X_dict[j])
-            remotecall_fetch(wait, agent_procs[j], @spawnat(agent_procs[j], getfield(Main, Symbol("chx", sys))))
-            x_sys[j] = fetch(@spawnat(agent_procs[j], fetch(getfield(Main, Symbol("chx", sys)))))
-        end
-    end 
-
-    return x_sys 
- 
-end
-
-
-
-
-
-
-
-
-
-@everywhere function z_exchange(z::Array, sys::Int, neighbours::Array, agent_procs::Dict)
-
-    Z_dict = Dict()
-    Z_dict[sys] = z
-
-    put!(chz, z) 
-    @sync for j in neighbours
-        @async begin
-            remotecall_fetch(wait, agent_procs[j], getfield(Main, :chz))
-            Z_dict[j] = fetch(@spawnat(agent_procs[j], fetch(getfield(Main, :chz))))
-        end
-    end
-
-    return Z_dict
-
-end
-
-
-
-
-
-
-
-
-@everywhere function hub_exchange(sys::Int, hub::Int, SOLVED::Bool, agent_procs::Dict, num::Int)
-
-    if sys != hub
-
-	put!(to_hub, SOLVED)
-        remotecall_fetch(wait, agent_procs[hub], @spawnat(agent_procs[hub], from_hub))
-        ALL_SOLVED = fetch(@spawnat(agent_procs[hub], take!(from_hub)))
-
-    else
-
-        agent_check = Dict()
-        agent_check[hub] = SOLVED
-
-        @sync for j in filter(x->x!=hub, Array(1:num))
-            @async begin
-                remotecall_fetch(wait, agent_procs[j], @spawnat(agent_procs[j], to_hub))
-                agent_check[j] = fetch(@spawnat(agent_procs[j], take!(to_hub)))
-            end
-        end
-
-        ALL_SOLVED = false in [agent_check[j] for j = 1:num] ? false : true
-        println("ALL_SOLVED = ", ALL_SOLVED)
-        for _ in 1:num-1
-            put!(from_hub, ALL_SOLVED)
-	end
-
-    end
-
-    return ALL_SOLVED
-
-end
-
-
-
-
-
-
-
-@everywhere function nhood_mean(dict::Dict, sys::Int, nhood::Array)
-
-    agg = zeros(size(dict[nhood[1]]))
-    for j in nhood
-        agg += dict[j]
-    end
-    return agg / length(nhood)
-
-end
 
 
 
@@ -220,7 +95,7 @@ end
 
     iteration = 1
 
-    while iteration <= 5
+    while iteration <= 20
 
         # BEGIN TIMING LOOP
         loop = @elapsed begin

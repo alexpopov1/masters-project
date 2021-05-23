@@ -1,6 +1,7 @@
 
 
 
+
 using Distributed
 include("FormationModel.jl")
 
@@ -24,7 +25,7 @@ function hub_exchange(sys::Int, hub::Int, solution::Array, agent_procs::Dict,
         SOLVED, fixed = fetch(@spawnat(agent_procs[hub], take!(from_hub)))
 
     else
-
+        pairs = pairing(Array(1:num))
         agent_solution, new_additions, timing = Dict(), Dict(), Dict()
         agent_solution[hub] = solution
         new_additions[hub] = new_agents
@@ -37,13 +38,13 @@ function hub_exchange(sys::Int, hub::Int, solution::Array, agent_procs::Dict,
             end
         end
 
-        con_vals = [coupled_inequalities(agent_solution[i], agent_solution[i%num+1],
-                          parameters, i == num ? true : false) for i = 1:num_cars]
+        con_vals = [coupled_inequalities(agent_solution, pairs, parameters) for i = 1:num]
 
         SOLVED = maximum([maximum(con_vals[i]) for i = 1:num]) <= 1e-6 ? true : false
-      
+
+        fixed = isempty(fixed) ? [8] : union(fixed, union(vcat(values(new_additions)...)))
         # fixed = isempty(fixed) ? [findmax(timing)[2]] : union(fixed, union(vcat(values(new_additions)...)))
-        fixed = isempty(fixed) ? [Int(num/2)] : union(fixed, union(vcat(values(new_additions)...)))       
+        # fixed = isempty(fixed) ? [Int(num/2)] : union(fixed, union(vcat(values(new_additions)...)))       
         if solve_time >= 0
             println("fixed = ", fixed)
         end

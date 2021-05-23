@@ -1,4 +1,6 @@
 
+
+
 # Required packages
 using Plots                               # For plotting results
 using Distributed                         # For parallelising
@@ -16,6 +18,7 @@ using LinearAlgebra                       # For norm calculation
 @everywhere include("Algorithm.jl")
 @everywhere include("FormationModel.jl")
 @everywhere include("WarmStart.jl")
+@everywhere include("SpineSweep.jl")
 
 
 @everywhere function make_graph(num::Int, init::Array, num_of_neighbours::Int)
@@ -31,7 +34,7 @@ using LinearAlgebra                       # For norm calculation
 
         # rank = [sort(collect(distance), by=x->x[2])[j][1] for j=1:num-1]
         # neighbours[i] = rank[1:num_of_neighbours]
-        neighbours[i] = [j for j in filter(x->x!=i, Array(1:num)) if distance[j] <= 3]
+        neighbours[i] = [j for j in filter(x->x!=i, Array(1:num)) if distance[j] <= 2.5]
 
     end
 
@@ -50,29 +53,29 @@ num = 8             # Number of agents
 hub = 4
 T = 50              # Fixed time horizon
 N = 10 * T          # Number of time discretisations
-rmin = 0.5          # Minimum distance between any two agents
+rmin = 0.2          # Minimum distance between any two agents
 v_final = [2, 0]    # Final velocity
 
 umax = 0.15         # Maximum input
 vmax = 5            # Maximum speed
 
-xc, yc = 50, 7     # Centre coordinates of terminal circle
-rc = 0.75           # Radius of terminal circle
+xc, yc = 50, 15     # Centre coordinates of terminal circle
+rc = 1          # Radius of terminal circle
 
 init = [[0, 1, 1, 0.2],        # Initial conditions                      
-        [0, 3, 1, 0.15],
-        [0, 5, 1, 0.1],
-        [0, 7, 1, 0.05],
-        [0, 9, 1, 0],
-        [0, 11, 1, -0.05],
-        [0, 13, 1, -0.1],
-        [0, 15, 1, -0.15]]
+        [1, 2, 1, 0.15],
+        [-1, 3, 1, 0.1],
+        [0, 4, 1, 0.05],
+        [1, 5, 1, 0],
+        [-1, 6, 1, -0.05],
+        [0, 7, 1, -0.1],
+        [1, 8, 1, -0.15]]
 
 num_of_neighbours = 2
-
+path = [2, 4, 5, 7]
 
 iter_limit = 1000
-solve_method = 3
+solve_method = 1
 
 
 # KEY
@@ -81,6 +84,7 @@ solve_method = 3
 # 3: consensus
 # 4: ADMM
 # 5: algorithm
+# 6: spinesweep
 
 # ****************************************************************************************************************
 
@@ -91,7 +95,6 @@ solve_method = 3
 
 
 neighbours = make_graph(num, init, num_of_neighbours)
-
 parameters = num, T, N, init, v_final, (umax, vmax, rmin, xc, yc, rc)
 agent_procs = Dict(i=>workers()[i] for i = 1:parameters[1])
 
@@ -99,11 +102,10 @@ states, inputs = Dict(), Dict()
 timing, testing, history = Dict(), Dict(), Dict()
 
 
-
 if solve_method == 1
 
-    states, inputs = remotecall_fetch(centralised, 2, parameters)
-
+    states, inputs, timing = remotecall_fetch(centralised, 2, parameters)
+    println("Total time: ", timing)
 
 
 
@@ -146,6 +148,19 @@ elseif solve_method == 5
                                                                          max_iterations = 50)
     end
 
+
+
+
+elseif solve_method == 6
+
+    @sync for sys = 1:num
+        @async states[sys], inputs[sys], timing[sys] = remotecall_fetch(spinesweep, agent_procs[sys], 
+                                                           sys, parameters, neighbours[sys], path)
+    end
+    println("DONE!")
+    println("Total time: ", maximum([timing[i] for i = 1:num]))
+    println("Max violation = ", maximum(coupled_inequalities(states, pairing(Array(1:num)), parameters)))
+
 end
 
 
@@ -180,17 +195,6 @@ end
 
 
 
-values = Dict()
-agent_pairs = pairing(Array(1:num))
-critical_pairs = []
-
-for pair in agent_pairs
-    values[pair] = coupled_inequalities(states, [pair], parameters)
-    if maximum(values[pair]) > 0
-        push!(critical_pairs, pair)
-    end
-end
-
 
 
 function circle_plot(R, xc, yc)
@@ -199,8 +203,9 @@ function circle_plot(R, xc, yc)
         y_upper = (R^2 .- x.^2).^0.5
         y_lower = -(R^2 .- x.^2).^0.5
 
-        plot(x.+xc, y_upper.+yc, linecolor=:blue, legend=false, aspect_ratio=:equal)
-        plot!(x.+xc, y_lower.+yc, linecolor=:blue)
+        plot(x.+xc, y_upper.+yc, linecolor=:blue, legend=false, 
+             aspect_ratio=:equal, linestyle=:dot)
+        plot!(x.+xc, y_lower.+yc, linecolor=:blue, linestyle=:dot)
 
         return Nothing
 
@@ -209,15 +214,23 @@ end
 
 
 circle_plot(rc, xc, yc)
-trajectory_plot = plot!(states[1][1,:], states[1][2,:], color=:red, legend=false, grid=false, linewidth=0.5)
-plot!([states[1][1,1]], [states[1][2,1]], seriestype=:scatter, markercolor=:red, markerstrokecolor=:red, markersize=3)
-plot!([states[1][1,N+1]], [states[1][2,N+1]], seriestype=:scatter, markercolor=:red, markerstrokecolor=:red, markersize=3)
+
+trajectory_plot = plot!(states[1][1,:], states[1][2,:], 
+                  color=:grey, legend=false, grid=false, linewidth=0.5,
+                  ylims=(0,20))
+plot!([states[1][1,1]], [states[1][2,1]], seriestype=:scatter,
+      markercolor=:red, markerstrokecolor=:red, markersize=2)
+plot!([states[1][1,N+1]], [states[1][2,N+1]], seriestype=:scatter, 
+     markercolor=:red, markerstrokecolor=:red, markersize=2)
 
 
 for i = 2:num
-    plot!(states[i][1,:], states[i][2,:], color=:red, legend=false, linewidth=0.5)
-    plot!([states[i][1,1]], [states[i][2,1]], seriestype=:scatter, markercolor=:red, markerstrokecolor=:red, markersize=3)
-    plot!([states[i][1,N+1]], [states[i][2,N+1]], seriestype=:scatter, markercolor=:red, markerstrokecolor=:red, markersize=3)
+    plot!(states[i][1,:], states[i][2,:], color=:grey, 
+          legend=false, linewidth=0.5)
+    plot!([states[i][1,1]], [states[i][2,1]], seriestype=:scatter, 
+          markercolor=:red, markerstrokecolor=:red, markersize=2)
+    plot!([states[i][1,N+1]], [states[i][2,N+1]], seriestype=:scatter, 
+          markercolor=:red, markerstrokecolor=:red, markersize=2)
 end
 
 display(trajectory_plot)
@@ -226,8 +239,4 @@ display(trajectory_plot)
 # Find input cost
 inputCost = sum(sum([inputs[i] .* inputs[i] for i = 1:num]))
 println("Input cost = ", inputCost)
-
-
-
-
 

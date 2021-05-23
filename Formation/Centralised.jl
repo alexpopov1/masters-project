@@ -1,15 +1,14 @@
-
 include("FormationModel.jl")
 include("WarmStart.jl")
 
 
 @everywhere function centralised(parameters)
-  
+
     num, _ = parameters
     model = base_model(1, parameters)
     update_model(model, Array(1:num), [1], parameters)
     warm_start(model, parameters, Array(1:num), [])
-    @time optimise_model(model)
+    timing = @elapsed optimise_model(model)
 
     states = Dict()
     inputs = Dict()
@@ -19,6 +18,6 @@ include("WarmStart.jl")
         inputs[i] = value.(model[:u][i])
     end
 
-    return states, inputs
+    return states, inputs, timing
 
 end

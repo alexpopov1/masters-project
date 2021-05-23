@@ -1,4 +1,3 @@
-
 """
 ADMM algorithm and some required functions, applicable to formation problem
 """
@@ -6,7 +5,7 @@ ADMM algorithm and some required functions, applicable to formation problem
 
 include("FormationModel.jl")
 include("DataTransfer.jl")
-
+include("WarmStart.jl")
 
 
 
@@ -36,10 +35,11 @@ end
 
 
 
-@everywhere function solve_problem(model::Model, Z_dict::Dict, nhood::Array, stored_mean::Bool, rho::Float64, lambda::Array)
+@everywhere function solve_problem(model::Model, Z_dict::Dict, nhood::Array, parameters::Tuple,
+                                   stored_mean::Bool, rho::Float64, lambda::Array)
 
     stored_mean && consistency(model, Z_dict, nhood, rho, lambda)
-
+    warm_start(model, parameters, nhood)
     optimise_model(model)
     X_dict, U_dict = Dict(), Dict()
     for j in nhood
@@ -89,7 +89,7 @@ end
 
     # Initialise channels for global communication
     if sys == hub
-        global from_hub = Channel{Bool}(num-1)
+        global from_hub = Channel{Any}(num-1)
     else
         global to_hub = Channel{Any}(1)
     end
@@ -105,7 +105,7 @@ end
 
     iteration = 1
 
-    while iteration <= 5
+    while iteration <= 20
 
         # BEGIN TIMING LOOP
         loop = @elapsed begin
@@ -121,7 +121,7 @@ end
 
         # Solve problem 
         stored_mean = iteration == 1 ? false : true
-        X_dict, U_dict = solve_problem(model, Z_dict, nhood, stored_mean, rho, lambda)
+        X_dict, U_dict = solve_problem(model, Z_dict, nhood, parameters, stored_mean, rho, lambda)
 
         # Gather assumed trajectories from neighbours, and broadcast trajectories to neigbours
         x_sys = x_exchange(X_dict, sys, neighbours, agent_procs)

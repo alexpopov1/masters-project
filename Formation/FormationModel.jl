@@ -1,4 +1,9 @@
 
+
+
+
+
+
 using JuMP, Ipopt
 
 
@@ -139,6 +144,7 @@ end
 
     @objective(model, Min, sum(u[sys].^2))
     @constraint(model, equalities(sys, x[sys], u[sys], parameters) .== 0)          # Equality constraints
+
     @constraint(model, uncoupled_inequalities(x[sys], u[sys], parameters) .<= 0)   # Uncoupled inequality constraints
     
     return model
@@ -195,6 +201,7 @@ end
     
         @objective(model, Min, sum(sum([u[j].^2 for j in nhood])))
         @constraint(model, [j in new_neighbours], equalities(j, x[j], u[j], parameters) .== 0)
+
         @constraint(model, [j in new_neighbours], uncoupled_inequalities(x[j], u[j], parameters) .<= 0)
         @constraint(model, coupled_inequalities(x, new_pairs, parameters) .<= 0)
               
@@ -230,6 +237,10 @@ end
     nothing
    
 end
+
+
+
+
 
 
 

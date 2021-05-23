@@ -1,11 +1,10 @@
-
 include("FormationModel.jl")
 
 
 
 
 
-@everywhere function warm_start(x::Array, u::Array, states::Array, inputs::Array)
+function warm_start(x::Array, u::Array, states::Array, inputs::Array)
 
     # Set warm start for states
     for j = 1:size(x)[1]
@@ -43,7 +42,7 @@ end
 
 
 
-@everywhere function warm_start(model::Model, parameters::Tuple, nhood::Array, prev_nhood::Array)
+function warm_start(model::Model, parameters::Tuple, nhood::Array, prev_nhood::Array)
 
     if has_values(model)
 
@@ -66,3 +65,28 @@ end
     end
 
 end
+
+
+
+function warm_start(model::Model, parameters::Tuple, nhood::Array)
+
+    warm_start(model, parameters, nhood, nhood)
+
+end
+
+
+
+
+function warm_start(model::Model, variable_agents::Array, prev_solutions::Dict)
+
+    for i in variable_agents
+        x_solution, u_solution = prev_solutions[i]
+        warm_start(model[:x][i], model[:u][i], x_solution, u_solution)
+    end
+
+end
+
+
+
+
+

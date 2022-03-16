@@ -1,6 +1,8 @@
 
 
-
+""" 
+A series of functions implementing the data transfer between processes for ADMM
+"""
 
 using Distributed
 include("FormationModel.jl")
@@ -81,7 +83,6 @@ end
 
 
 
-# For consensus and ADMM algorithms
 function x_exchange(X_dict::Dict, sys::Int, neighbours::Array, agent_procs::Dict)
 
     x_sys = Dict()  
@@ -96,30 +97,6 @@ function x_exchange(X_dict::Dict, sys::Int, neighbours::Array, agent_procs::Dict
     end 
 
     return x_sys 
- 
-end
-
-
-
-
-
-
-
-# For new algorithm
-function x_exchange(X_dict::Dict, U_dict::Dict, sys::Int, neighbours::Array, agent_procs::Dict)
-
-    x_from, u_from = Dict(), Dict()  
-    x_from[sys], u_from[sys] = X_dict, U_dict
-
-    @sync for j in neighbours
-        @async begin
-            put!(getfield(Main, Symbol("chx", j)), (X_dict, U_dict))
-            remotecall_fetch(wait, agent_procs[j], @spawnat(agent_procs[j], getfield(Main, Symbol("chx", sys))))
-            x_from[j], u_from[j],  = fetch(@spawnat(agent_procs[j], fetch(getfield(Main, Symbol("chx", sys)))))
-        end
-    end 
-
-    return x_from, u_from
  
 end
 

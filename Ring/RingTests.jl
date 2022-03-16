@@ -10,7 +10,7 @@ using LinearAlgebra                       # For norm calculation
 # Required files
 @everywhere include("Centralised.jl")
 @everywhere include("ADMM.jl")
-@everywhere include("CDS-BS.jl")
+@everywhere include("CDSBS.jl")
 @everywhere include("RingModel.jl")
 @everywhere include("WarmStart.jl")
 

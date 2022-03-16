@@ -15,12 +15,13 @@ using LinearAlgebra                       # For norm calculation
 @everywhere include("Centralised.jl")
 @everywhere include("ADMM.jl")
 @everywhere include("Consensus.jl")
-@everywhere include("CDS-PS.jl")
+@everywhere include("CDSPS.jl")
 @everywhere include("FormationModel.jl")
 @everywhere include("WarmStart.jl")
 @everywhere include("SpineSweep.jl")
 
 
+# Construct graph by defining neighbourhood for each node
 @everywhere function make_graph(num::Int, init::Array, num_of_neighbours::Int)
 
     neighbours = Dict()
@@ -49,20 +50,24 @@ end
 # ****************************************************************************************************************
 
 # MODEL PROPERTIES
-num = 8             # Number of agents
+num = 8                  # Number of agents
 hub = 4
-T = 50              # Fixed time horizon
-N = 10 * T          # Number of time discretisations
-rmin = 0.2          # Minimum distance between any two agents
-v_final = [2, 0]    # Final velocity
+T = 50                   # Fixed time horizon
+N = 10 * T               # Number of time discretisations
+rmin = 0.2               # Minimum distance between any two agents
+v_final = [2, 0]         # Final velocity
 
-umax = 0.15         # Maximum input
-vmax = 5            # Maximum speed
+umax = 0.15              # Maximum input
+vmax = 5                 # Maximum speed
 
-xc, yc = 50, 15     # Centre coordinates of terminal circle
-rc = 1          # Radius of terminal circle
+xc, yc = 50, 15          # Centre coordinates of terminal circle
+rc = 1                   # Radius of terminal circle
 
-init = [[0, 1, 1, 0.2],        # Initial conditions                      
+num_of_neighbours = 2    # Number of neighbours for each node
+path = [2, 4, 5, 7]      # Path induced by connected dominating set
+    
+# Initial conditions  
+init = [[0, 1, 1, 0.2],                            
         [1, 2, 1, 0.15],
         [-1, 3, 1, 0.1],
         [0, 4, 1, 0.05],
@@ -71,11 +76,10 @@ init = [[0, 1, 1, 0.2],        # Initial conditions
         [0, 7, 1, -0.1],
         [1, 8, 1, -0.15]]
 
-num_of_neighbours = 2
-path = [2, 4, 5, 7]
+
 
 iter_limit = 1000
-solve_method = 1
+solve_method = 1  # see KEY
 
 
 # KEY
@@ -87,10 +91,6 @@ solve_method = 1
 # 6: spinesweep
 
 # ****************************************************************************************************************
-
-
-
-
 
 
 

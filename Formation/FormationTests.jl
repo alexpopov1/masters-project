@@ -15,7 +15,7 @@ using LinearAlgebra                       # For norm calculation
 @everywhere include("Centralised.jl")
 @everywhere include("ADMM.jl")
 @everywhere include("Consensus.jl")
-@everywhere include("Algorithm.jl")
+@everywhere include("CDS-PS.jl")
 @everywhere include("FormationModel.jl")
 @everywhere include("WarmStart.jl")
 @everywhere include("SpineSweep.jl")

@@ -90,7 +90,7 @@ end
 
 
 # Implement CDS Path Sweep algorithm
-function algorithm(sys::Int, hub::Int, parameters::Tuple, neighbours::Array; 
+function CDSPS(sys::Int, hub::Int, parameters::Tuple, neighbours::Array; 
                    agent_procs::Dict = Dict(i=>sort(workers())[i] for i = 1:parameters[1]), max_iterations = 10)
                           
     # Define constant parameters 

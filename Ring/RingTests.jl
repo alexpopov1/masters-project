@@ -8,16 +8,14 @@ using LinearAlgebra                       # For norm calculation
 
 
 # Required files
-@everywhere include("SmallestNeighbourhood.jl")
 @everywhere include("Centralised.jl")
 @everywhere include("ADMM.jl")
-@everywhere include("Consensus.jl")
-@everywhere include("Algorithm.jl")
+@everywhere include("CDS-BS.jl")
 @everywhere include("RingModel.jl")
 @everywhere include("WarmStart.jl")
 
 
-
+# Define neighbourhood for each agent
 function make_neighbourhood(num_cars::Int, num_followers::Array{Int64, 1}, num_leaders::Array{Int64, 1})
 
     leaders = Array{Array{Int64}}(undef, num_cars)
@@ -52,41 +50,27 @@ function make_neighbourhood(num_cars::Int, num_followers::Array{Int64, 1}, num_l
     return neighbours
 
 end
-
-
-
-
-
-
-
-
-
-
-
-
-
+	
+	
 
 # ****************************************************************************************************************
 
 # MODEL PROPERTIES
-num_cars = 32                                          # Number of cars
-dstart = Array(range(8, stop = 8, length = num_cars))  # Relative starting positions
-dsep = 2                                               # Initial and final distance between consecutive cars
-D = 500                                                # Total distance travelled by each car
-radius = 200                                           # Radius of ring
-dmin = 0.5                                             # Minimum distance between consecutive cars
-umax = 0.1                                             # Maximum force
-umin = -0.2                                            # Minimum force
-vmax = 200                                             # Maximum velocity
-vmin = -vmax                                           # Minimum velocity
-T = 100                                                # Fixed time horizon
-N = 10 * T                                             # Number of time discretisations
-# v1 = v2 = Array(range(0, stop=0, length=num_cars))   # Initial velocities
-# v1 = [([[1,0,-1], repeat([0],num_cars-3)]...)...]
+num_cars = 32                                                       # Number of cars
+dstart = Array(range(8, stop = 8, length = num_cars))               # Relative starting positions
+dsep = 2                                                            # Initial and final distance between consecutive cars
+D = 500                                                             # Total distance travelled by each car
+radius = 200                                                        # Radius of ring
+dmin = 0.5                                                          # Minimum distance between consecutive cars
+umax = 0.1                                                          # Maximum force
+umin = -0.2                                                         # Minimum force
+vmax = 200                                                          # Maximum velocity
+vmin = -vmax                                                        # Minimum velocity
+T = 100                                                             # Fixed time horizon
+N = 10 * T                                                          # Number of time discretisations  
 v1 = [([reverse(Array(range(1, length=Int(num_cars/2), step=2))), 
-        Array(range(-1, length=Int(num_cars/2), step=-2))]...)...]
-
-v2 = Array(range(0, stop=0, length=num_cars))          # Terminal velocities
+        Array(range(-1, length=Int(num_cars/2), step=-2))]...)...]  # Initial velocities
+v2 = Array(range(0, stop=0, length=num_cars))                       # Terminal velocities
 
 
 # GRAPH PROPERTIES
@@ -94,14 +78,12 @@ num_followers = repeat([1], num_cars)                  # Number of leaders
 num_leaders = repeat([1], num_cars)                    # Number of followers
 num_followers[1] = 0
 num_leaders[num_cars] = 0
-# num_followers = [1, 1, 2, 3, 1, 1, 1, 1]
-# num_leaders = [3, 2, 1, 0, 1, 1, 1, 1]
 hub = Int(ceil(num_cars/2))                            # Hub agent
 
 
 # SOLVER PROPERTIES (see KEY)
 iter_limit = 100                                       # Ipopt iteration limit
-solve_method = 3                                    # Solve method flag
+solve_method = 3                                       # Solve method flag
 
 
 # KEY
@@ -111,17 +93,7 @@ solve_method = 3                                    # Solve method flag
 
 # ****************************************************************************************************************
 
-
-
-
-
-
-
-
-
-
-
-
+# Calculate model parameters for circle configuration
 omega_min = vmin / radius
 omega_max = vmax / radius
 omega1 = v1 ./ radius
@@ -157,7 +129,7 @@ elseif solve_method == 2
 elseif solve_method == 3
 
     @sync for sys = 1:num_cars
-        @async states[sys], inputs[sys], history[sys], timing[sys], testing[sys] = remotecall_fetch(algorithm, agent_procs[sys],
+        @async states[sys], inputs[sys], history[sys], timing[sys], testing[sys] = remotecall_fetch(CDSBS, agent_procs[sys],
                                                                          sys, hub, parameters, neighbours[sys],
                                                                          max_iterations = 50)
     end
@@ -193,21 +165,18 @@ if solve_method in [2, 3]
 
 end
 
-
-
-
-
-
+# Prepare plotting variables
 t = range(0,stop=T,length=N+1)
 trajectories = [states[i][1, :] for i = 1:num_cars]
 inputsworkers = [inputs[i] for i = 1:num_cars]
 
+# Plot trajectories
 trajectoryPlot = plot(t, trajectories, legend=false)
 display(trajectoryPlot)
 
+# Plot scaled error (discrepancy between equivalent agent paths according to different neighbourhood solutions)
 scaled_error = violation_norm / violation_norm[1]
 resplot = plot(1:iterations, scaled_error, xlab="Iterations", ylab="Scaled error", legend=false)
-
 
 # Find input cost
 inputCost = sum(sum([inputs[i] .* inputs[i] for i = 1:num_cars]))

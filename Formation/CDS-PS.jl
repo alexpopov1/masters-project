@@ -1,7 +1,7 @@
 
 
 """
-Alternative consensus algorithm and some required functions, applicable to formation problem
+Connected Dominating Set Path Sweep (CDS-PS) and some required functions, applicable to formation problem
 """
 
 
@@ -11,7 +11,7 @@ include("DataTransfer.jl")
 
 
 
-
+# Define reduced model by replacing already-solved local problems with fixed solutions
 function reduced_model(X_fixed::Dict, nhood::Array, parameters::Tuple)
 
     num, _, N = parameters
@@ -49,8 +49,6 @@ function reduced_model(X_fixed::Dict, nhood::Array, parameters::Tuple)
         end
 
         new_cons = coupled_inequalities(vars_and_constants, mixed_pairs, parameters)
-
-
         @constraint(model, vcat(new_cons...) .<= 0)
         
 
@@ -67,7 +65,7 @@ end
 
 
 
-
+# Function to solve the optimisation problem according to its current form
 function solve_problem(model::Model, X_fixed::Dict, U_fixed::Dict, nhood::Array, stored_mean::Bool, sys::Int)
 
     if length(X_fixed) < length(nhood)
@@ -91,38 +89,22 @@ end
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
+# Implement CDS Path Sweep algorithm
 function algorithm(sys::Int, hub::Int, parameters::Tuple, neighbours::Array; 
                    agent_procs::Dict = Dict(i=>sort(workers())[i] for i = 1:parameters[1]), max_iterations = 10)
                           
-
     # Define constant parameters 
     num, _, N = parameters
     nhood = [([sys, neighbours]...)...]
 
-
     # Create model
     model = model_setup(sys, parameters, nhood)
     
-
     # Initialise variables
     X_dict, U_dict, X_fixed, U_fixed, Z_dict, history = Dict(), Dict(), Dict(), Dict(), Dict(), Dict()
     x_sys = Any[]
 
-
-
-
+    # Initialise channels
     if sys == hub
         global from_hub = Channel{Any}(num-1)
     else
@@ -173,12 +155,7 @@ function algorithm(sys::Int, hub::Int, parameters::Tuple, neighbours::Array;
             break
         end
 
-
-
-
         X_fixed = Dict()
-
-  
         
         if length(intersect(fixed, nhood)) >= 1
             for j in nhood
@@ -191,7 +168,6 @@ function algorithm(sys::Int, hub::Int, parameters::Tuple, neighbours::Array;
             model = reduced_model(X_fixed, nhood, parameters)  
         end  
   
-
         history[iteration] = X_dict[sys]
 
 

@@ -11,4 +11,4 @@ schemes, these algorithms can also be implemented with an efficient communicatio
 them ideal for real cyber-physical systems. We test the methods on a set of dynamic optimization
 problems, demonstrating impressive performance in comparison to alternative strategies.
 
-This repository contains the code developed throughout the project (see folders 'ExternalActiveSet', 'Formation' and 'Ring) as well as a PDF versions of the final thesis and the accompanying presentation slides (see 'Thesis').
+This repository contains the code developed throughout the project (see folders 'ExternalActiveSet', 'Formation' and 'Ring') as well as a PDF versions of the final thesis and the accompanying presentation slides (see 'Thesis').

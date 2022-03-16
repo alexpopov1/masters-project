@@ -1,4 +1,7 @@
 
+"""
+A series of functions implementing data transfer for ADMM and CDSBS
+"""
 
 using Distributed
 include("RingModel.jl")
@@ -79,7 +82,7 @@ end
 
 
 
-# For consensus and ADMM algorithms
+# For ADMM 
 function x_exchange(X_dict::Dict, sys::Int, neighbours::Array, agent_procs::Dict)
 
     x_sys = Dict()  
@@ -103,7 +106,7 @@ end
 
 
 
-# For new algorithm
+# For CDSBS
 function x_exchange(X_dict::Dict, U_dict::Dict, sys::Int, neighbours::Array, agent_procs::Dict)
 
     x_from, u_from = Dict(), Dict()  
@@ -126,7 +129,7 @@ end
 
 
 
-
+# For ADMM
 function z_exchange(z::Array, sys::Int, neighbours::Array, agent_procs::Dict)
 
     Z_dict = Dict()

@@ -101,15 +101,13 @@ hub = Int(ceil(num_cars/2))                            # Hub agent
 
 # SOLVER PROPERTIES (see KEY)
 iter_limit = 100                                       # Ipopt iteration limit
-solve_method = 5                                    # Solve method flag
+solve_method = 3                                    # Solve method flag
 
 
 # KEY
 # 1: centralised
-# 2: smallest neighbour
-# 3: consensus
-# 4: ADMM
-# 5: algorithm
+# 2: ADMM
+# 3: CDS-BS
 
 # ****************************************************************************************************************
 
@@ -142,43 +140,12 @@ timing, testing, history = Dict(), Dict(), Dict()
 
 
 
-
-
 if solve_method == 1
-
+		
     @time states, inputs = remotecall_fetch(centralised, 2, parameters)
 
-
-
-
-
+		
 elseif solve_method == 2
-
-    @time @sync for sys = 1:num_cars
-        @async states[sys], inputs[sys], timing[sys] = remotecall_fetch(smallest_neighbourhood, agent_procs[sys],
-                                                   sys, hub, parameters, neighbours[sys], iter_limit = iter_limit)
-    end
-
-    println("TOTAL TIME TO COMPLETION: ", mean([timing[j] for j = 1:num_cars]))
-
-
-
-
-
-elseif solve_method == 3
-
-    historyset = Dict()
-    @sync for sys = 1:num_cars
-        @async states[sys], inputs[sys], historyset[sys], timing[sys] = remotecall_fetch(consensus, agent_procs[sys],
-                                                                         sys, hub, parameters, neighbours[sys],
-                                                                         max_iterations = 5)
-    end
-    
-    history = Dict(j=>Dict(i=>historyset[j][i][1] for i=1:length(historyset[1])) for j = 1:num_cars)
-    z_track = Dict(j=>Dict(i=>historyset[j][i][2] for i=1:length(historyset[1])) for j = 1:num_cars)
-
-
-elseif solve_method == 4
 
     @sync for sys = 1:num_cars
         @async states[sys], inputs[sys], history[sys], timing[sys] = remotecall_fetch(ADMM, agent_procs[sys],
@@ -186,8 +153,8 @@ elseif solve_method == 4
                                                                          rho = 1.0, max_iterations = 50)
     end
 
-
-elseif solve_method == 5
+			
+elseif solve_method == 3
 
     @sync for sys = 1:num_cars
         @async states[sys], inputs[sys], history[sys], timing[sys], testing[sys] = remotecall_fetch(algorithm, agent_procs[sys],
@@ -199,7 +166,7 @@ end
 
 
 
-if solve_method in [3, 4, 5]
+if solve_method in [2, 3]
 
     println("Total time: ", maximum([timing[i] for i = 1:num_cars]))
     iterations = length(history[1])

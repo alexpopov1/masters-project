@@ -1,4 +1,6 @@
-
+"""
+Connected Dominating Set Path Sweep (CDS-PS) and some required functions, applicable to formation problem
+"""
 
 
 include("FormationModel.jl")
@@ -7,7 +9,7 @@ include("WarmStart.jl")
 
 
 
-
+# Define reduced model by replacing already-solved local problems with fixed solutions
 function new_model(X_fixed::Dict, nhood::Array, parameters::Tuple)
 
     num, _, N = parameters
@@ -65,7 +67,7 @@ end
 
 
 
-
+# Function to solve the optimisation problem according to its current form
 function solve_problem(model::Model, x_fixed::Dict, u_fixed::Dict, 
                        nhood::Array, parameters::Tuple, prev_solutions::Dict)
 
@@ -103,8 +105,8 @@ end
 
 
 
-
-function spinesweep(sys::Int, parameters::Tuple, neighbours::Array, path::Array;
+# Implement CDS Path Sweep algorithm
+function CDSPS(sys::Int, parameters::Tuple, neighbours::Array, path::Array;
                     agent_procs::Dict = Dict(i=>sort(workers())[i] for i = 1:parameters[1]))
 
     # Define constant parameters

@@ -1,6 +1,6 @@
 
 """
-Alternative consensus algorithm and some required functions, applicable to vehicle platoon problem
+Connected Dominating Set Branch Sweep algorithm and some required functions, applicable to vehicle platoon problem
 """
 
 
@@ -10,7 +10,7 @@ include("DataTransfer.jl")
 
 
 
-
+# Define reduced model by treating already-solved local problems as fixed constraints for remaining agents
 function reduced_model(X_fixed::Dict, nhood::Array, parameters::Tuple)
 
     num_cars, _, N = parameters
@@ -57,7 +57,7 @@ end
 
 
 
-
+# Solve optimisation problem according to current form
 function solve_problem(model::Model, X_fixed::Dict, U_fixed::Dict, nhood::Array, stored_mean::Bool, sys::Int)
 
     if length(X_fixed) < length(nhood)
@@ -92,8 +92,8 @@ end
 
 
 
-
-function algorithm(sys::Int, hub::Int, parameters::Tuple, neighbours::Array; 
+# Implement CDSBS algorithm
+function CDSBS(sys::Int, hub::Int, parameters::Tuple, neighbours::Array; 
                    agent_procs::Dict = Dict(i=>sort(workers())[i] for i = 1:parameters[1]), max_iterations = 10)
                           
 

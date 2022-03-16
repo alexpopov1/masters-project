@@ -11,14 +11,11 @@ using LinearAlgebra                       # For norm calculation
 
 
 # Required files
-@everywhere include("SmallestNeighbourhood.jl")
 @everywhere include("Centralised.jl")
 @everywhere include("ADMM.jl")
-@everywhere include("Consensus.jl")
 @everywhere include("CDSPS.jl")
 @everywhere include("FormationModel.jl")
 @everywhere include("WarmStart.jl")
-@everywhere include("SpineSweep.jl")
 
 
 # Construct graph by defining neighbourhood for each node
@@ -51,7 +48,7 @@ end
 
 # MODEL PROPERTIES
 num = 8                  # Number of agents
-hub = 4
+hub = 4                  # Hub agent
 T = 50                   # Fixed time horizon
 N = 10 * T               # Number of time discretisations
 rmin = 0.2               # Minimum distance between any two agents
@@ -84,11 +81,8 @@ solve_method = 1  # see KEY
 
 # KEY
 # 1: centralised
-# 2: smallest neighbour
-# 3: consensus
-# 4: ADMM
-# 5: algorithm
-# 6: spinesweep
+# 2: ADMM
+# 3: CDSPS
 
 # ****************************************************************************************************************
 
@@ -110,28 +104,6 @@ if solve_method == 1
 
 
 elseif solve_method == 2
-    
-    @sync for sys = 1:num
-        @async states[sys], inputs[sys], timing[sys] = remotecall_fetch(smallest_neighbourhood, agent_procs[sys],
-                                                   sys, hub, parameters, neighbours[sys], iter_limit = iter_limit)
-    end
-
-    println("TOTAL TIME TO COMPLETION: ", mean([timing[j] for j = 1:num]))
-
-
-
-elseif solve_method == 3
-
-
-    @sync for sys = 1:num
-        @async states[sys], inputs[sys], history[sys], timing[sys] = remotecall_fetch(consensus, agent_procs[sys],
-                                                                         sys, hub, parameters, neighbours[sys])
-    end
-
-
-
-
-elseif solve_method == 4
 
     @sync for sys = 1:num
         @async states[sys], inputs[sys], history[sys], timing[sys] = remotecall_fetch(ADMM, agent_procs[sys],
@@ -140,21 +112,10 @@ elseif solve_method == 4
 
 
 
-elseif solve_method == 5
+elseif solve_method == 3
 
     @sync for sys = 1:num
-        @async states[sys], inputs[sys], history[sys], timing[sys], testing[sys] = remotecall_fetch(algorithm, agent_procs[sys],
-                                                                         sys, hub, parameters, neighbours[sys],
-                                                                         max_iterations = 50)
-    end
-
-
-
-
-elseif solve_method == 6
-
-    @sync for sys = 1:num
-        @async states[sys], inputs[sys], timing[sys] = remotecall_fetch(spinesweep, agent_procs[sys], 
+        @async states[sys], inputs[sys], timing[sys] = remotecall_fetch(CDSPS, agent_procs[sys], 
                                                            sys, parameters, neighbours[sys], path)
     end
     println("DONE!")
@@ -165,7 +126,7 @@ end
 
 
 
-if solve_method in [3, 4, 5]
+if solve_method == 2
    
     println("Total time: ", maximum([timing[i] for i = 1:num]))
     iterations = length(history[1])

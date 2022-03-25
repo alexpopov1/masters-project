@@ -5,7 +5,7 @@ Connected Dominating Set Branch Sweep algorithm and some required functions, app
 
 
 
-include("RingModel.jl")
+include("PlatoonModel.jl")
 include("DataTransfer.jl")
 
 

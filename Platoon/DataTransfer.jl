@@ -4,7 +4,7 @@ A series of functions implementing data transfer for ADMM and CDSBS
 """
 
 using Distributed
-include("RingModel.jl")
+include("PlatoonModel.jl")
 
 
 

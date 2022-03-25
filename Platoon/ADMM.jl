@@ -4,7 +4,7 @@ ADMM algorithm and some required functions, applicable to vehicle platoon proble
 
 
 
-include("RingModel.jl")
+include("PlatoonModel.jl")
 include("DataTransfer.jl")
 
 

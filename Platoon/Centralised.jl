@@ -1,5 +1,5 @@
 """
-Centralised optimisation for vehicle platoon ring problem
+Centralised optimisation for vehicle platoon problem
 
 """
 
@@ -7,7 +7,7 @@ Centralised optimisation for vehicle platoon ring problem
 using JuMP     # Optimisation problem definition
 using Ipopt    # Optimisation solver
 
-include("RingModel.jl")
+include("PlatoonModel.jl")
 
 
 

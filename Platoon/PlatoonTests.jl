@@ -11,7 +11,7 @@ using LinearAlgebra                       # For norm calculation
 @everywhere include("Centralised.jl")
 @everywhere include("ADMM.jl")
 @everywhere include("CDSBS.jl")
-@everywhere include("RingModel.jl")
+@everywhere include("PlatoonModel.jl")
 @everywhere include("WarmStart.jl")
 
 
@@ -55,7 +55,7 @@ end
 
 # ****************************************************************************************************************
 
-# MODEL PROPERTIES
+# MODEL PROPERTIES (platoon layout calculated from 'straightened' ring of agents)
 num_cars = 32                                                       # Number of cars
 dstart = Array(range(8, stop = 8, length = num_cars))               # Relative starting positions
 dsep = 2                                                            # Initial and final distance between consecutive cars
